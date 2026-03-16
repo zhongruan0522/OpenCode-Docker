@@ -1,0 +1,56 @@
+name: Check OpenCode Updates
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get latest release
+        id: release
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest release: $LATEST"
+
+      - name: Check if already built
+        id: check
+        run: |
+          if git tag | grep -q "opencode-${{ steps.release.outputs.version }}"; then
+            echo "has_update=false" >> $GITHUB_OUTPUT
+            echo "Already built for ${{ steps.release.outputs.version }}"
+          else
+            echo "has_update=true" >> $GITHUB_OUTPUT
+            echo "New version available: ${{ steps.release.outputs.version }}"
+          fi
+
+      - name: Trigger build
+        if: steps.check.outputs.has_update == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'docker-build.yml',
+              ref: 'main'
+            });
+
+      - name: Create tag
+        if: steps.check.outputs.has_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "opencode-${{ steps.release.outputs.version }}"
+          git push origin "opencode-${{ steps.release.outputs.version }}"

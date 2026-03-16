@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  opencode:
+    image: ghcr.io/anomalyco/opencode-docker:latest
+    environment:
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
+    ports:
+      - "4096:4096"
+    volumes:
+      - ./workspace:/workspace
+    restart: unless-stopped

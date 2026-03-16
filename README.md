@@ -27,7 +27,7 @@ The container will exit immediately if these variables are not set.
 docker run -d \
   -e OPENCODE_SERVER_USERNAME=your_username \
   -e OPENCODE_SERVER_PASSWORD=your_password \
-  -p 8080:8080 \
+  -p 4096:4096 \
   -v $(pwd)/workspace:/workspace \
   ghcr.io/your-org/opencode-docker:latest
 ```
@@ -43,7 +43,7 @@ services:
       - OPENCODE_SERVER_USERNAME=your_username
       - OPENCODE_SERVER_PASSWORD=your_password
     ports:
-      - "8080:8080"
+      - "4096:4096"
     volumes:
       - ./workspace:/workspace
 ```
