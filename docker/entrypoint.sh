@@ -8,7 +8,7 @@ echo "Environment validation passed."
 echo "Username: $OPENCODE_SERVER_USERNAME"
 
 if [ "$(id -u)" = '0' ]; then
-    exec gosu app opencode web
+    exec gosu app opencode serve --hostname 0.0.0.0
 fi
 
-exec opencode web
+exec opencode serve --hostname 0.0.0.0
