@@ -1,12 +1,13 @@
 version: '3.8'
 services:
   opencode:
-    image: ghcr.io/anomalyco/opencode-docker:latest
+    image: ghcr.io/zhongruan0522/opencode-docker:latest
     environment:
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
     ports:
-      - "4096:4096"
+      - "127.0.0.1:4096:4096"
     volumes:
       - ./workspace:/workspace
+      - ./config:/home/app/.config/opencode
     restart: unless-stopped
