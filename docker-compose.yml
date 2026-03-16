@@ -2,6 +2,7 @@ version: '3.8'
 services:
   opencode:
     image: ghcr.io/zhongruan0522/opencode-docker:latest
+    user: "10001:10001"
     environment:
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
