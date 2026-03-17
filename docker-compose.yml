@@ -12,4 +12,5 @@ services:
     volumes:
       - ./workspace:/workspace:rshared
       - ./.config:/home/app/.config:rshared
+      - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
     restart: unless-stopped
