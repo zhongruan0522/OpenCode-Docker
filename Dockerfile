@@ -52,6 +52,4 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /workspace
 
-USER app
-
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

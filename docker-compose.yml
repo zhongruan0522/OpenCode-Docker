@@ -2,13 +2,14 @@ version: '3.8'
 services:
   opencode:
     image: ghcr.io/zhongruan0522/opencode-docker:latest
-    user: "10001:10001"
     environment:
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
+      - LOCAL_UID=${LOCAL_UID:-10001}
+      - LOCAL_GID=${LOCAL_GID:-10001}
     ports:
-      - "127.0.0.1:4096:4096"
+      - "127.0.0.1:${PORT:-4096}:4096"
     volumes:
-      - ./workspace:/workspace
-      - ./config:/home/app/.config/opencode
+      - ./workspace:/workspace:rshared
+      - ./.config:/home/app/.config:rshared
     restart: unless-stopped
