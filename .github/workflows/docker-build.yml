@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - main
@@ -19,12 +17,43 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Get OpenCode latest version
+        id: version
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Building version: $LATEST"
+
+      - name: Check if release already exists
+        id: check_release
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.version }})
+          if [ "$STATUS" = "200" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release ${{ steps.version.outputs.version }} already exists, skipping release creation"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        if: steps.check_release.outputs.exists != 'true' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: OpenCode ${{ steps.version.outputs.version }}
+          body: |
+            Docker image for [OpenCode ${{ steps.version.outputs.version }}](https://github.com/anomalyco/opencode/releases/tag/${{ steps.version.outputs.version }})
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -48,9 +77,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=latest,enable=${{ is_default_branch }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

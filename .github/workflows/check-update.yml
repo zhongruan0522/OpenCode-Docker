@@ -11,32 +11,40 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
-      contents: write
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      contents: read
 
-      - name: Get latest release
-        id: release
+    steps:
+      - name: Get OpenCode latest release
+        id: upstream
         run: |
           LATEST=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
           echo "version=$LATEST" >> $GITHUB_OUTPUT
-          echo "Latest release: $LATEST"
+          echo "OpenCode latest: $LATEST"
 
-      - name: Check if already built
-        id: check
+      - name: Get our latest release
+        id: local
         run: |
-          if git tag | grep -q "opencode-${{ steps.release.outputs.version }}"; then
+          LOCAL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.tag_name // empty')
+          echo "version=$LOCAL" >> $GITHUB_OUTPUT
+          if [ -n "$LOCAL" ]; then
+            echo "Our latest: $LOCAL"
+          else
+            echo "No existing release found"
+          fi
+
+      - name: Compare versions
+        id: compare
+        run: |
+          if [ "${{ steps.local.outputs.version }}" = "${{ steps.upstream.outputs.version }}" ]; then
             echo "has_update=false" >> $GITHUB_OUTPUT
-            echo "Already built for ${{ steps.release.outputs.version }}"
+            echo "Already up to date: ${{ steps.upstream.outputs.version }}"
           else
             echo "has_update=true" >> $GITHUB_OUTPUT
-            echo "New version available: ${{ steps.release.outputs.version }}"
+            echo "New version available: ${{ steps.upstream.outputs.version }}"
           fi
 
       - name: Trigger build
-        if: steps.check.outputs.has_update == 'true'
+        if: steps.compare.outputs.has_update == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -46,11 +54,3 @@ jobs:
               workflow_id: 'docker-build.yml',
               ref: 'main'
             });
-
-      - name: Create tag
-        if: steps.check.outputs.has_update == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "opencode-${{ steps.release.outputs.version }}"
-          git push origin "opencode-${{ steps.release.outputs.version }}"
