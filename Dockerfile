@@ -33,9 +33,27 @@ RUN apt-get update \
 ENV PATH="/usr/local/go/bin:${PATH}" \
     GOPATH="/home/app/go"
 
+# Playwright MCP is a Node tool; install it in the image so OpenCode can start
+# the browser MCP without downloading packages at runtime.
+#
+# NOTE: @playwright/mcp pins a specific (often alpha) Playwright version.
+# We install Chromium using that exact Playwright dependency to avoid revision
+# mismatches like "Executable doesn't exist" at runtime.
+ARG PLAYWRIGHT_MCP_VERSION=0.0.68
+
+# Keep browsers in a shared path owned by the non-root user at runtime.
+# Also default Playwright MCP to a container-friendly mode.
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
+    PLAYWRIGHT_MCP_HEADLESS=1 \
+    PLAYWRIGHT_MCP_BROWSER=chromium
+
 RUN npm install -g npm@latest \
     && npm install -g opencode-ai \
-    && npx @playwright/mcp@latest install --with-deps chromium \
+    && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
+    && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
+    && PLAYWRIGHT_CLI="$(npm root -g)/playwright/cli.js" \
+    && [ -f "$PLAYWRIGHT_CLI" ] || PLAYWRIGHT_CLI="$(npm root -g)/@playwright/mcp/node_modules/playwright/cli.js" \
+    && PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "$PLAYWRIGHT_CLI" install --with-deps chromium \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
@@ -52,9 +70,7 @@ RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash
     && mkdir -p /workspace /home/app/.config/opencode /home/app/.cache \
     && chown -R app:app /home/app /workspace
 
-RUN cp -r /root/.cache/ms-playwright /home/app/.cache/ms-playwright \
-    && chown -R app:app /home/app/.cache/ms-playwright \
-    && rm -rf /root/.cache/ms-playwright
+RUN chown -R app:app "${PLAYWRIGHT_BROWSERS_PATH}"
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
