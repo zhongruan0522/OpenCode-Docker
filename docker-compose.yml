@@ -7,6 +7,7 @@ services:
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - GITHUB_SSH_KEY=${GITHUB_SSH_KEY}
+      - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
       - LOCAL_UID=${LOCAL_UID:-10001}
       - LOCAL_GID=${LOCAL_GID:-10001}
     ports:
