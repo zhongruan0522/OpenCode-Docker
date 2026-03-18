@@ -35,7 +35,6 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
 
 RUN npm install -g npm@latest \
     && npm install -g opencode-ai \
-    && npx playwright install chromium --with-deps \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
@@ -49,8 +48,14 @@ ENV LANG=zh_CN.UTF-8 \
     HOME=/home/app
 
 RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash --uid 10001 app; fi \
-    && mkdir -p /workspace /home/app/.config/opencode \
+    && mkdir -p /workspace /home/app/.config/opencode /home/app/.cache \
     && chown -R app:app /home/app /workspace
+
+USER app
+
+RUN npx playwright install chromium --with-deps
+
+USER root
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
