@@ -10,7 +10,7 @@ echo "Username: $OPENCODE_SERVER_USERNAME"
 if [ -n "$GITHUB_TOKEN" ]; then
     echo "Configuring GitHub CLI with provided token..."
     mkdir -p /home/app/.config/gh
-    echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null && echo "GitHub login success." || echo "GitHub login failed."
+    echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null && gh auth setup-git 2>/dev/null && echo "GitHub login success." || echo "GitHub login failed."
 fi
 
 if [ -n "$GITHUB_SSH_KEY" ]; then
