@@ -7,6 +7,22 @@ set -e
 echo "Environment validation passed."
 echo "Username: $OPENCODE_SERVER_USERNAME"
 
+if [ -n "$GITHUB_TOKEN" ]; then
+    echo "Configuring GitHub CLI with provided token..."
+    mkdir -p /home/app/.config/gh
+    echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null && echo "GitHub login success." || echo "GitHub login failed."
+fi
+
+if [ -n "$GITHUB_SSH_KEY" ]; then
+    echo "Configuring GitHub SSH key..."
+    mkdir -p /home/app/.ssh
+    echo "$GITHUB_SSH_KEY" | base64 -d > /home/app/.ssh/id_rsa
+    chmod 600 /home/app/.ssh/id_rsa
+    ssh-keyscan github.com >> /home/app/.ssh/known_hosts 2>/dev/null
+    chown -R app:app /home/app/.ssh
+    echo "GitHub SSH key configured."
+fi
+
 if [ "$(id -u)" = '0' ]; then
     LOCAL_UID=${LOCAL_UID:-10001}
     LOCAL_GID=${LOCAL_GID:-$LOCAL_UID}
