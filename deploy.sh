@@ -72,6 +72,38 @@ info "拉取镜像..."
 docker compose pull 2>/dev/null || docker pull "$IMAGE"
 ok "镜像就绪"
 
+info "生成 OpenCode 配置（如不存在）..."
+mkdir -p .config/opencode
+
+# 为了让浏览器 MCP 开箱即用，我们为 OpenCode 写入一个最小的全局配置。
+# 注意：如果你已经有自己的 opencode.json，这里不会覆盖。
+if [ ! -f ".config/opencode/opencode.json" ]; then
+    cat > ".config/opencode/opencode.json" <<'EOF'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": [
+        "playwright-mcp",
+        "--headless",
+        "--browser",
+        "chromium",
+        "--no-sandbox"
+      ],
+      "enabled": true,
+      "environment": {
+        "PLAYWRIGHT_BROWSERS_PATH": "/home/app/.cache/ms-playwright"
+      }
+    }
+  }
+}
+EOF
+    ok "已创建 .config/opencode/opencode.json（启用 Playwright MCP）"
+else
+    ok "检测到已有 .config/opencode/opencode.json，跳过生成"
+fi
+
 info "启动容器..."
 docker compose up -d
 ok "启动成功！"
@@ -82,5 +114,5 @@ echo -e "\033[1;32m  OpenCode 已部署完成！\033[0m"
 echo -e "\033[1;32m  访问地址: http://127.0.0.1:$port\033[0m"
 echo -e "\033[1;32m  用户名:   $username\033[0m"
 echo -e "\033[1;32m  工作目录: $(pwd)/workspace\033[0m"
-echo -e "\033[1;32m  配置目录: $(pwd)/config\033[0m"
+echo -e "\033[1;32m  配置目录: $(pwd)/.config\033[0m"
 echo -e "\033[1;32m========================================\033[0m"

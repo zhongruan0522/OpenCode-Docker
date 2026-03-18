@@ -45,7 +45,8 @@ ARG PLAYWRIGHT_MCP_VERSION=0.0.68
 # Also default Playwright MCP to a container-friendly mode.
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     PLAYWRIGHT_MCP_HEADLESS=1 \
-    PLAYWRIGHT_MCP_BROWSER=chromium
+    PLAYWRIGHT_MCP_BROWSER=chromium \
+    PLAYWRIGHT_MCP_NO_SANDBOX=1
 
 RUN npm install -g npm@latest \
     && npm install -g opencode-ai \

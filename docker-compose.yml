@@ -8,6 +8,10 @@ services:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - GITHUB_SSH_KEY=${GITHUB_SSH_KEY}
       - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
+      # Playwright MCP defaults (safe for most container environments)
+      - PLAYWRIGHT_MCP_HEADLESS=1
+      - PLAYWRIGHT_MCP_BROWSER=chromium
+      - PLAYWRIGHT_MCP_NO_SANDBOX=1
       - LOCAL_UID=${LOCAL_UID:-10001}
       - LOCAL_GID=${LOCAL_GID:-10001}
     ports:
