@@ -30,8 +30,7 @@ RUN apt-get update \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
-    && curl -fsSL https://bun.sh/install | bash \
-    && mv /root/.bun /opt/bun \
+    && BUN_INSTALL=/opt/bun curl -fsSL https://bun.sh/install | bash \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}" \
