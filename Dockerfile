@@ -23,6 +23,7 @@ RUN apt-get update \
         tini \
         vim \
         wget \
+        unzip \
         nano \
         tmux \
         sqlite3 \
