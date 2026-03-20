@@ -25,13 +25,18 @@ RUN apt-get update \
         wget \
         nano \
         tmux \
+        sqlite3 \
+        libsqlite3-dev \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
+    && curl -fsSL https://bun.sh/install | bash \
+    && mv /root/.bun /opt/bun \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/usr/local/go/bin:${PATH}" \
-    GOPATH="/home/app/go"
+ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}" \
+    GOPATH="/home/app/go" \
+    BUN_INSTALL="/opt/bun"
 
 # Playwright MCP is a Node tool; install it in the image so OpenCode can start
 # the browser MCP without downloading packages at runtime.
