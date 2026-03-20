@@ -6,6 +6,9 @@ WORKDIR /app
 
 ENV GOLANG_VERSION=1.22.0
 
+# Install Bun into /opt/bun instead of /root/.bun. Because the installer runs
+# through a pipe, BUN_INSTALL must be exported before invoking bash.
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         locales \
@@ -31,7 +34,9 @@ RUN apt-get update \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
-    && BUN_INSTALL=/opt/bun curl -fsSL https://bun.sh/install | bash \
+    && export BUN_INSTALL=/opt/bun \
+    && curl -fsSL https://bun.sh/install | bash \
+    && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}" \
