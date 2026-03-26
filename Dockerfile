@@ -1,6 +1,7 @@
 FROM node:22-bookworm-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG OPENCODE_VERSION=latest
 USER root
 WORKDIR /app
 
@@ -59,7 +60,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     PLAYWRIGHT_MCP_NO_SANDBOX=1
 
 RUN npm install -g npm@latest \
-    && npm install -g opencode-ai \
+    && npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
     && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
     && PLAYWRIGHT_CLI="$(npm root -g)/playwright/cli.js" \
