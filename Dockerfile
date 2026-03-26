@@ -59,13 +59,21 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     PLAYWRIGHT_MCP_BROWSER=chromium \
     PLAYWRIGHT_MCP_NO_SANDBOX=1
 
-RUN npm install -g npm@latest \
-    && npm install -g opencode-ai@${OPENCODE_VERSION} \
+RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
     && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
-    && PLAYWRIGHT_CLI="$(npm root -g)/playwright/cli.js" \
-    && [ -f "$PLAYWRIGHT_CLI" ] || PLAYWRIGHT_CLI="$(npm root -g)/@playwright/mcp/node_modules/playwright/cli.js" \
-    && PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "$PLAYWRIGHT_CLI" install --with-deps chromium \
+    && PLAYWRIGHT_ROOT="$(npm root -g)" \
+    && if [ -f "${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright/cli.js" ]; then \
+         PLAYWRIGHT_CLI="${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright/cli.js"; \
+       elif [ -f "${PLAYWRIGHT_ROOT}/playwright/cli.js" ]; then \
+         PLAYWRIGHT_CLI="${PLAYWRIGHT_ROOT}/playwright/cli.js"; \
+       elif [ -f "${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright-core/cli.js" ]; then \
+         PLAYWRIGHT_CLI="${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright-core/cli.js"; \
+       else \
+         echo "Playwright CLI not found in ${PLAYWRIGHT_ROOT}" >&2; \
+         exit 1; \
+       fi \
+    && PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "${PLAYWRIGHT_CLI}" install --with-deps chromium \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
