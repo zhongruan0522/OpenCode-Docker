@@ -30,8 +30,14 @@ RUN apt-get update \
         unzip \
         nano \
         tmux \
+        ripgrep \
         sqlite3 \
         libsqlite3-dev \
+        python-is-python3 \
+        pandoc \
+        poppler-utils \
+        libreoffice \
+        fonts-noto-cjk \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
@@ -50,6 +56,8 @@ ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}" \
 # NOTE: @playwright/mcp pins a specific (often alpha) Playwright version.
 # We install Chromium using that exact Playwright dependency to avoid revision
 # mismatches like "Executable doesn't exist" at runtime.
+# Office/document skills and scraping skills also depend on additional npm and
+# Python packages, so install them here to keep fresh images usable out of the box.
 ARG PLAYWRIGHT_MCP_VERSION=0.0.68
 
 # Keep browsers in a shared path owned by the non-root user at runtime.
@@ -61,6 +69,13 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
 
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
+    && npm install -g docx pptxgenjs \
+    && python3 -m pip install --no-cache-dir --break-system-packages \
+         "markitdown[pptx]" \
+         openpyxl \
+         pandas \
+         Pillow \
+         "scrapling[all]>=0.4.2" \
     && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
     && PLAYWRIGHT_ROOT="$(npm root -g)" \
     && if [ -f "${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright/cli.js" ]; then \
@@ -74,6 +89,7 @@ RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
          exit 1; \
        fi \
     && PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "${PLAYWRIGHT_CLI}" install --with-deps chromium \
+    && scrapling install --force \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
