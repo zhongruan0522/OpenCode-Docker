@@ -69,7 +69,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
 
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
-    && npm install -g docx pptxgenjs \
+    && npm install -g docx pptxgenjs zread_cli \
     && python3 -m pip install --no-cache-dir --break-system-packages \
          "markitdown[pptx]" \
          openpyxl \
