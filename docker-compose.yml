@@ -20,4 +20,5 @@ services:
       - ./workspace:/workspace:rshared
       - ./.config:/home/app/.config:rshared
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
+      - ./.zread:/home/app/.zread:rshared
     restart: unless-stopped
