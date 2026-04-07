@@ -5,7 +5,7 @@ ARG OPENCODE_VERSION=latest
 USER root
 WORKDIR /app
 
-ENV GOLANG_VERSION=1.22.0
+ENV GOLANG_VERSION=1.26.1
 
 # Install Bun into /opt/bun instead of /root/.bun. Because the installer runs
 # through a pipe, BUN_INSTALL must be exported before invoking bash.
@@ -58,7 +58,7 @@ ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}" \
 # mismatches like "Executable doesn't exist" at runtime.
 # Office/document skills and scraping skills also depend on additional npm and
 # Python packages, so install them here to keep fresh images usable out of the box.
-ARG PLAYWRIGHT_MCP_VERSION=0.0.68
+ARG PLAYWRIGHT_MCP_VERSION=0.0.70
 
 # Keep browsers in a shared path owned by the non-root user at runtime.
 # Also default Playwright MCP to a container-friendly mode.
