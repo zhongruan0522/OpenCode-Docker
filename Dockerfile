@@ -77,6 +77,7 @@ RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
          Pillow \
          "scrapling[all]>=0.4.2" \
     && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
+    # Install chromium via Node MCP's playwright (revision 1217 = Chrome 147)
     && PLAYWRIGHT_ROOT="$(npm root -g)" \
     && if [ -f "${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright/cli.js" ]; then \
          PLAYWRIGHT_CLI="${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright/cli.js"; \
@@ -89,6 +90,20 @@ RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
          exit 1; \
        fi \
     && PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "${PLAYWRIGHT_CLI}" install --with-deps chromium \
+    # Detect the installed revision and symlink it for Python playwright compatibility.
+    # Node MCP uses alpha playwright (currently revision 1217), while Python playwright
+    # stable looks for revision 1208. Symlinking avoids downloading a second copy (~600MB).
+    && PYTHON_PW_REVISION=$(python3 -m playwright install --dry-run chromium 2>&1 | grep -oP 'chromium v\K[0-9]+') \
+    && NODE_REVISION=$(ls -d "${PLAYWRIGHT_BROWSERS_PATH}/chromium-"* | grep -oP 'chromium-\K[0-9]+' | sort -rn | head -1) \
+    && if [ "${PYTHON_PW_REVISION}" != "${NODE_REVISION}" ]; then \
+         echo "Symlinking chromium-${PYTHON_PW_REVISION} -> chromium-${NODE_REVISION} for Python playwright"; \
+         ln -sf "${PLAYWRIGHT_BROWSERS_PATH}/chromium-${NODE_REVISION}" "${PLAYWRIGHT_BROWSERS_PATH}/chromium-${PYTHON_PW_REVISION}"; \
+         if [ -d "${PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-${NODE_REVISION}" ]; then \
+           ln -sf "${PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-${NODE_REVISION}" "${PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-${PYTHON_PW_REVISION}"; \
+         fi; \
+       else \
+         echo "Revisions match (${NODE_REVISION}), no symlink needed"; \
+       fi \
     && scrapling install --force \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
