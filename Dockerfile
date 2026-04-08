@@ -1,3 +1,15 @@
+# ==========================================
+# 阶段 1：编译 MicroSOCKS 引擎 (基于 MicroWARP)
+# ==========================================
+FROM alpine:latest AS microsocks-builder
+
+RUN apk add --no-cache build-base git
+RUN git clone https://github.com/rofl0r/microsocks.git /src && \
+    cd /src && make
+
+# ==========================================
+# 阶段 2：主运行环境
+# ==========================================
 FROM node:22-bookworm-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -6,9 +18,6 @@ USER root
 WORKDIR /app
 
 ENV GOLANG_VERSION=1.26.1
-
-# Install Bun into /opt/bun instead of /root/.bun. Because the installer runs
-# through a pipe, BUN_INSTALL must be exported before invoking bash.
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -38,6 +47,11 @@ RUN apt-get update \
         poppler-utils \
         libreoffice \
         fonts-noto-cjk \
+    # WireGuard 和网络工具（MicroWARP 依赖）
+        wireguard-tools \
+        iptables \
+        iproute2 \
+        kmod \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
@@ -46,26 +60,23 @@ RUN apt-get update \
     && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
     && rm -rf /var/lib/apt/lists/*
 
+# 从编译阶段复制 microsocks 二进制
+COPY --from=microsocks-builder /src/microsocks /usr/local/bin/microsocks
+
 ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun"
 
-# Playwright MCP is a Node tool; install it in the image so OpenCode can start
-# the browser MCP without downloading packages at runtime.
-#
-# NOTE: @playwright/mcp pins a specific (often alpha) Playwright version.
-# We install Chromium using that exact Playwright dependency to avoid revision
-# mismatches like "Executable doesn't exist" at runtime.
-# Office/document skills and scraping skills also depend on additional npm and
-# Python packages, so install them here to keep fresh images usable out of the box.
+# Playwright MCP 及文档/爬虫相关包的安装
 ARG PLAYWRIGHT_MCP_VERSION=0.0.70
 
-# Keep browsers in a shared path owned by the non-root user at runtime.
-# Also default Playwright MCP to a container-friendly mode.
+# 浏览器缓存路径和容器友好的 Playwright 默认配置
+# MicroWARP SOCKS5 代理环境变量（默认仅内部使用，监听 127.0.0.1:1080）
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     PLAYWRIGHT_MCP_HEADLESS=1 \
     PLAYWRIGHT_MCP_BROWSER=chromium \
-    PLAYWRIGHT_MCP_NO_SANDBOX=1
+    PLAYWRIGHT_MCP_NO_SANDBOX=1 \
+    WARP_SOCKS_PORT=1080
 
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
@@ -118,13 +129,14 @@ ENV LANG=zh_CN.UTF-8 \
     HOME=/home/app
 
 RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash --uid 10001 app; fi \
-    && mkdir -p /workspace /home/app/.config/opencode /home/app/.cache \
+    && mkdir -p /workspace /home/app/.config/opencode /home/app/.cache /etc/wireguard \
     && chown -R app:app /home/app /workspace
 
 RUN chown -R app:app "${PLAYWRIGHT_BROWSERS_PATH}"
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY docker/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/init-warp.sh
 
 WORKDIR /workspace
 

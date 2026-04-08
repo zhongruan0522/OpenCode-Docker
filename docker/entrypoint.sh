@@ -7,10 +7,32 @@ set -e
 echo "Environment validation passed."
 echo "Username: $OPENCODE_SERVER_USERNAME"
 
+# ==========================================
+# MicroWARP 初始化（可选，通过 ENABLE_WARP=1 开启）
+# ==========================================
+if [ "${ENABLE_WARP:-0}" = "1" ]; then
+    echo "==> [WARP] MicroWARP 已启用，正在初始化..."
+    WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
+    /usr/local/bin/init-warp.sh
+
+    # 仅设置 SOCKS5_PROXY，供容器内按需使用（如 curl --proxy、代码中的代理配置）
+    # 不设置 ALL_PROXY/HTTP_PROXY/HTTPS_PROXY，避免 opencode 的入站回包走代理
+    export SOCKS5_PROXY="socks5://127.0.0.1:${WARP_SOCKS_PORT}"
+    echo "==> [WARP] SOCKS5_PROXY 已注入: ${SOCKS5_PROXY} (按需使用，不影响入站服务)"
+else
+    echo "==> [WARP] MicroWARP 未启用 (设置 ENABLE_WARP=1 以启用)"
+fi
+
+# ==========================================
+# GitHub CLI 配置
+# ==========================================
 if [ -n "$GITHUB_TOKEN" ]; then
     echo "Configuring GitHub CLI with provided token..."
     mkdir -p /home/app/.config/gh
-    echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null && gh auth setup-git 2>/dev/null && echo "GitHub login success." || echo "GitHub login failed."
+    echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null \
+        && gh auth setup-git 2>/dev/null \
+        && echo "GitHub login success." \
+        || echo "GitHub login failed."
 fi
 
 if [ -n "$GITHUB_SSH_KEY" ]; then
@@ -23,6 +45,9 @@ if [ -n "$GITHUB_SSH_KEY" ]; then
     echo "GitHub SSH key configured."
 fi
 
+# ==========================================
+# UID/GID 映射并启动 OpenCode
+# ==========================================
 if [ "$(id -u)" = '0' ]; then
     LOCAL_UID=${LOCAL_UID:-10001}
     LOCAL_GID=${LOCAL_GID:-$LOCAL_UID}
