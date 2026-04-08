@@ -31,6 +31,8 @@ services:
       - GH_PROXY=${GH_PROXY:-}
       # Tailscale 回程路由 CIDR（可选，默认 100.64.0.0/10）
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-}
+      # 私网绕过 CIDR 列表（空格分隔），默认绕过 RFC1918/链路本地/Tailscale
+      - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-}
     ports:
       - "${PORT:-4096}:4096"
     cap_add:
