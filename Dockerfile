@@ -4,8 +4,9 @@
 FROM alpine:latest AS microsocks-builder
 
 RUN apk add --no-cache build-base git
+# 静态编译 microsocks，避免 musl 动态链接在 Debian glibc 环境下无法运行
 RUN git clone https://github.com/rofl0r/microsocks.git /src && \
-    cd /src && make
+    cd /src && make CFLAGS="-static -O2" LDFLAGS="-static"
 
 # ==========================================
 # 阶段 2：主运行环境
