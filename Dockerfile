@@ -44,9 +44,7 @@ RUN apt-get update \
         sqlite3 \
         libsqlite3-dev \
         python-is-python3 \
-        pandoc \
         poppler-utils \
-        libreoffice \
         fonts-noto-cjk \
     # WireGuard 和网络工具（MicroWARP 依赖）
         wireguard-tools \
@@ -81,11 +79,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
 
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
-    && npm install -g docx pptxgenjs zread_cli \
+    && npm install -g zread_cli \
     && python3 -m pip install --no-cache-dir --break-system-packages \
-         "markitdown[pptx]" \
-         openpyxl \
-         pandas \
          Pillow \
          "scrapling[all]>=0.4.2" \
     && mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
