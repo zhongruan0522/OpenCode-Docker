@@ -79,7 +79,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
 
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
-    && npm install -g zread_cli \
+    && npm install -g zread_cli @larksuite/cli \
     && python3 -m pip install --no-cache-dir --break-system-packages \
          Pillow \
          "scrapling[all]>=0.4.2" \

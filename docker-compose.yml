@@ -47,6 +47,9 @@ services:
       - ./.config:/home/app/.config:rshared
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
       - ./.zread:/home/app/.zread:rshared
+      # Lark CLI 凭证持久化（应用配置 + 加密密钥）
+      - ./.lark-cli:/home/app/.lark-cli:rshared
+      - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared
       # WARP 配置持久化（避免每次重启都重新注册）
       - warp-data:/etc/wireguard
     networks:
