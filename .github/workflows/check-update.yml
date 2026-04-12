@@ -2,10 +2,10 @@ name: Check Updates
 
 on:
   schedule:
-    # UTC 6:00 = 北京时间 14:00
-    # UTC 19:00 = 北京时间 03:00
-    - cron: '0 6 * * *'
-    - cron: '0 19 * * *'
+    # 北京时间 8:00 / 12:00 / 20:00
+    - cron: '0 0 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 12 * * *'
   workflow_dispatch:
 
 jobs:
