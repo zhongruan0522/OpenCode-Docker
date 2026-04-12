@@ -8,6 +8,14 @@
 
 set -e
 
+# 静默模式：所有中间日志重定向，仅通过 warp_log / warp_ok / warp_fail 输出
+_EXEC_LOG="/tmp/microwarp-init.log"
+_WARP_EXIT_IP=""
+
+warp_log() { :; }
+warp_ok()   { echo "==> [WARP] ✅ WARP 代理启动成功"; }
+warp_fail() { echo "==> [WARP] ❌ WARP 代理启动失败 (日志: $_EXEC_LOG)"; exit 1; }
+
 WG_CONF="/etc/wireguard/wg0.conf"
 WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
 mkdir -p /etc/wireguard
@@ -28,35 +36,35 @@ build_wgcf_download_url() {
 # 阶段 1：自动注册 Cloudflare WARP 设备
 # ==========================================
 if [ ! -f "$WG_CONF" ]; then
-    echo "==> [MicroWARP] 未检测到配置，正在全自动初始化 Cloudflare WARP..."
+    warp_log "未检测到配置，正在全自动初始化 Cloudflare WARP..."
 
     ARCH=$(uname -m)
     case "$ARCH" in
         x86_64)  WGCF_ARCH="amd64" ;;
         aarch64) WGCF_ARCH="arm64" ;;
-        *) echo "==> [MicroWARP ERROR] 不支持的架构: $ARCH"; exit 1 ;;
+        *) echo "==> [WARP] ❌ 不支持的架构: $ARCH"; exit 1 ;;
     esac
 
     WGCF_VER=$(curl -sL https://api.github.com/repos/ViRb3/wgcf/releases/latest \
         | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
-    echo "==> [MicroWARP] wgcf 最新版本: v${WGCF_VER}"
+    warp_log "wgcf 最新版本: v${WGCF_VER}"
 
     wget --timeout=15 -qO /tmp/wgcf \
         "$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")"
     chmod +x /tmp/wgcf
 
-    echo "==> [MicroWARP] 正在向 Cloudflare 注册设备..."
+    warp_log "正在向 Cloudflare 注册设备..."
     cd /tmp && ./wgcf register --accept-tos > /dev/null
 
-    echo "==> [MicroWARP] 正在生成 WireGuard 配置文件..."
+    warp_log "正在生成 WireGuard 配置文件..."
     ./wgcf generate > /dev/null
     mv /tmp/wgcf-profile.conf "$WG_CONF"
 
     # 阅后即焚：删除注册工具和账号明文
     rm -f /tmp/wgcf /tmp/wgcf-account.toml
-    echo "==> [MicroWARP] 节点配置生成成功！"
+    warp_log "节点配置生成成功！"
 else
-    echo "==> [MicroWARP] 检测到已有持久化配置，跳过注册。"
+    warp_log "检测到已有持久化配置，跳过注册。"
 fi
 
 # ==========================================
@@ -97,7 +105,7 @@ fi
 
 # 自定义 Endpoint IP，用于绕过某些机房的 QoS 限制
 if [ -n "${ENDPOINT_IP:-}" ]; then
-    echo "==> [MicroWARP] 检测到自定义 Endpoint: $ENDPOINT_IP"
+    warp_log "检测到自定义 Endpoint: $ENDPOINT_IP"
     sed -i "s/^Endpoint.*/Endpoint = $ENDPOINT_IP/g" "$WG_CONF"
 fi
 
@@ -112,7 +120,7 @@ PRE_WARP_GW=$(printf '%s\n' "$PRE_WARP_ROUTE" \
 PRE_WARP_DEV=$(printf '%s\n' "$PRE_WARP_ROUTE" \
     | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") print $(i + 1)}')
 
-echo "==> [MicroWARP] 正在启动内核级 wg0 网卡..."
+warp_log "正在启动内核级 wg0 网卡..."
 wg-quick up wg0 > /dev/null 2>&1
 
 # ==========================================
@@ -127,31 +135,31 @@ PRE_DEFAULT_DEV=$(printf '%s\n' "$PRE_DEFAULT_GW" | awk '{for (i = 1; i <= NF; i
 WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-"10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10"}
 
 if [ -n "$PRE_DEFAULT_GW_IP" ] && [ -n "$PRE_DEFAULT_DEV" ]; then
-    echo "==> [MicroWARP] 正在恢复私网绕过路由..."
+    warp_log "正在恢复私网绕过路由..."
     for cidr in $WARP_BYPASS_CIDRS; do
         if ip route replace "$cidr" via "$PRE_DEFAULT_GW_IP" dev "$PRE_DEFAULT_DEV" > /dev/null 2>&1; then
-            echo "==> [MicroWARP] 已添加绕过路由: $cidr via $PRE_DEFAULT_GW_IP dev $PRE_DEFAULT_DEV"
+            warp_log "已添加绕过路由: $cidr via $PRE_DEFAULT_GW_IP dev $PRE_DEFAULT_DEV"
         fi
     done
 else
-    echo "==> [MicroWARP] 未检测到启动前默认网关，跳过私网绕过路由恢复"
+    warp_log "未检测到启动前默认网关，跳过私网绕过路由恢复"
 fi
 
 # 恢复 Tailscale 回程路由（如有）
 TAILSCALE_CIDR="${TAILSCALE_CIDR:-100.64.0.0/10}"
 if [ -n "$PRE_WARP_GW" ] && [ -n "$PRE_WARP_DEV" ]; then
     if ip route replace "$TAILSCALE_CIDR" via "$PRE_WARP_GW" dev "$PRE_WARP_DEV" > /dev/null 2>&1; then
-        echo "==> [MicroWARP] 已为 ${TAILSCALE_CIDR} 恢复回程路由"
+        warp_log "已为 ${TAILSCALE_CIDR} 恢复回程路由"
     fi
 fi
 
 # ==========================================
 # 阶段 4：启动 SOCKS5 代理（仅监听 localhost）
 # ==========================================
-echo "==> [MicroWARP] 启动 MicroSOCKS 引擎，监听 127.0.0.1:${WARP_SOCKS_PORT}"
+warp_log "启动 MicroSOCKS 引擎，监听 127.0.0.1:${WARP_SOCKS_PORT}"
 
 if [ -n "${SOCKS_USER:-}" ] && [ -n "${SOCKS_PASS:-}" ]; then
-    echo "==> [MicroWARP] SOCKS5 认证已开启 (User: $SOCKS_USER)"
+    warp_log "SOCKS5 认证已开启 (User: $SOCKS_USER)"
     microsocks -i 127.0.0.1 -p "$WARP_SOCKS_PORT" \
         -u "$SOCKS_USER" -P "$SOCKS_PASS" &
 else
@@ -164,20 +172,17 @@ sleep 1
 
 # 验证 microsocks 是否成功启动，避免后续误以为 WARP 已可用
 if ! kill -0 "$WARP_PID" 2>/dev/null; then
-    echo "==> [MicroWARP ERROR] microsocks failed to stay alive after startup"
-    exit 1
+    warp_fail
 fi
 
-# 验证路由：公网默认应走 WARP，私网地址应命中原网关的更具体路由。
-echo "==> [MicroWARP] 验证路由 (公网出口，应为 WARP):"
-curl -s -m 5 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep -E 'ip=' | head -1 \
-    || echo "⚠️ 公网出口 IP 获取超时"
-echo "==> [MicroWARP] 验证路由 (本地 SOCKS5 代理出口，应同样为 WARP):"
-curl -s -m 5 --proxy "socks5://127.0.0.1:${WARP_SOCKS_PORT}" \
-    https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep -E 'ip=' | head -1 \
-    || echo "⚠️ 代理出口 IP 获取超时"
-echo "==> [MicroWARP] 验证私网绕过路由 (192.168.1.1):"
-ip route get 192.168.1.1 2>/dev/null | head -n 1 || echo "⚠️ 私网路由查询失败"
+# 获取出口 IP
+_WARP_EXIT_IP=$(curl -s -m 5 --proxy "socks5://127.0.0.1:${WARP_SOCKS_PORT}" \
+    https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep -oE 'ip=[0-9.]+' | cut -d= -f2 || true)
 
-echo "==> [MicroWARP] SOCKS5 代理已启动 (PID: $WARP_PID)，地址: socks5://127.0.0.1:${WARP_SOCKS_PORT}"
-echo "==> [MicroWARP] 当前模式：公网默认走 WARP，私网/本地地址按更具体路由直连绕过"
+warp_ok
+
+if [ -n "$_WARP_EXIT_IP" ]; then
+    echo "==> [WARP] 出口 IP: $_WARP_EXIT_IP"
+else
+    echo "==> [WARP] 出口 IP: 获取超时"
+fi

@@ -11,14 +11,11 @@ echo "Username: $OPENCODE_SERVER_USERNAME"
 # MicroWARP 初始化（可选，通过 ENABLE_WARP=1 开启）
 # ==========================================
 if [ "${ENABLE_WARP:-0}" = "1" ]; then
-    echo "==> [WARP] MicroWARP 已启用，正在初始化..."
     WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
     /usr/local/bin/init-warp.sh
 
-    # 额外暴露本地 SOCKS5 代理地址，供容器内显式代理使用。
-    # 路由层面默认公网已走 WARP，仅私网/本地地址按更具体路由绕过。
     export SOCKS5_PROXY="socks5://127.0.0.1:${WARP_SOCKS_PORT}"
-    echo "==> [WARP] SOCKS5_PROXY 已注入: ${SOCKS5_PROXY} (公网默认走 WARP，私网直连绕过)"
+    echo "==> [WARP] 环境变量已注入: SOCKS5_PROXY=${SOCKS5_PROXY}"
 else
     echo "==> [WARP] MicroWARP 未启用 (设置 ENABLE_WARP=1 以启用)"
 fi
