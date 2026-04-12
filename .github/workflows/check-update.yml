@@ -1,7 +1,9 @@
-name: Check OpenCode Updates
+name: Check Updates
 
 on:
   schedule:
+    # UTC 6:00 = 北京时间 14:00
+    # UTC 19:00 = 北京时间 03:00
     - cron: '0 6 * * *'
     - cron: '0 19 * * *'
   workflow_dispatch:
@@ -14,34 +16,65 @@ jobs:
       contents: read
 
     steps:
+      # ==========================================
+      # 获取上游最新版本
+      # ==========================================
       - name: Get OpenCode latest release
-        id: upstream
+        id: opencode
         run: |
           LATEST=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
           echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "OpenCode latest: $LATEST"
 
-      - name: Get our latest release
+      - name: Get code-server latest release
+        id: codeserver
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name')
+          # code-server 的 tag 带 v 前缀，剥离后存纯版本号
+          echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
+          echo "code-server latest: $LATEST"
+
+      # ==========================================
+      # 获取我们上次记录的版本（从 release body 提取）
+      # ==========================================
+      - name: Get our current versions
         id: local
         run: |
-          LOCAL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.tag_name // empty')
-          echo "version=$LOCAL" >> $GITHUB_OUTPUT
-          if [ -n "$LOCAL" ]; then
-            echo "Our latest: $LOCAL"
-          else
-            echo "No existing release found"
+          BODY=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
+          if [ -n "$BODY" ]; then
+            LOCAL_OPENCODE=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
+            LOCAL_CODESERVER=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
           fi
+          echo "opencode=${LOCAL_OPENCODE:-none}" >> $GITHUB_OUTPUT
+          echo "codeserver=${LOCAL_CODESERVER:-none}" >> $GITHUB_OUTPUT
+          echo "Our OpenCode: ${LOCAL_OPENCODE:-none}"
+          echo "Our code-server: ${LOCAL_CODESERVER:-none}"
 
+      # ==========================================
+      # 比对版本，任意一个有更新就触发构建
+      # ==========================================
       - name: Compare versions
         id: compare
         run: |
-          if [ "${{ steps.local.outputs.version }}" = "${{ steps.upstream.outputs.version }}" ]; then
-            echo "has_update=false" >> $GITHUB_OUTPUT
-            echo "Already up to date: ${{ steps.upstream.outputs.version }}"
+          HAS_UPDATE="false"
+
+          # OpenCode 对比
+          if [ "${{ steps.local.outputs.opencode }}" != "${{ steps.opencode.outputs.version }}" ]; then
+            HAS_UPDATE="true"
+            echo "OpenCode needs update: ${{ steps.local.outputs.opencode }} -> ${{ steps.opencode.outputs.version }}"
           else
-            echo "has_update=true" >> $GITHUB_OUTPUT
-            echo "New version available: ${{ steps.upstream.outputs.version }}"
+            echo "OpenCode up to date: ${{ steps.opencode.outputs.version }}"
           fi
+
+          # code-server 对比
+          if [ "${{ steps.local.outputs.codeserver }}" != "${{ steps.codeserver.outputs.version }}" ]; then
+            HAS_UPDATE="true"
+            echo "code-server needs update: ${{ steps.local.outputs.codeserver }} -> ${{ steps.codeserver.outputs.version }}"
+          else
+            echo "code-server up to date: ${{ steps.codeserver.outputs.version }}"
+          fi
+
+          echo "has_update=$HAS_UPDATE" >> $GITHUB_OUTPUT
 
       - name: Trigger build
         if: steps.compare.outputs.has_update == 'true'
@@ -52,5 +85,9 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'docker-build.yml',
-              ref: 'main'
+              ref: 'main',
+              inputs: {
+                opencode_version: '${{ steps.opencode.outputs.version }}',
+                code_server_version: '${{ steps.codeserver.outputs.version }}'
+              }
             });

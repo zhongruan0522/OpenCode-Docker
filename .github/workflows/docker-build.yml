@@ -9,8 +9,13 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      version:
-        description: 'OpenCode version to build (e.g. 1.3.15). Leave empty for latest.'
+      opencode_version:
+        description: 'OpenCode version (e.g. v1.3.15). Leave empty for latest.'
+        required: false
+        default: ''
+        type: string
+      code_server_version:
+        description: 'code-server version (e.g. 4.115.0). Leave empty for latest.'
         required: false
         default: ''
         type: string
@@ -30,43 +35,63 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Resolve OpenCode version
+      # ==========================================
+      # 解析两个组件的版本号
+      # ==========================================
+      - name: Resolve versions
         id: version
         run: |
-          # If a specific version was provided via manual trigger, use it directly
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-            # Strip leading 'v' if user included it
-            VERSION="${VERSION#v}"
-            TAG="v${VERSION}"
-            echo "Building specified version: $TAG"
+          # --- OpenCode 版本 ---
+          if [ -n "${{ inputs.opencode_version }}" ]; then
+            OC_VERSION="${{ inputs.opencode_version }}"
+            OC_VERSION="${OC_VERSION#v}"
+            OC_TAG="v${OC_VERSION}"
           else
-            TAG=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
-            echo "Building latest version: $TAG"
+            OC_TAG=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
+            OC_VERSION="${OC_TAG#v}"
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          echo "OpenCode: $OC_TAG"
+
+          # --- code-server 版本 ---
+          if [ -n "${{ inputs.code_server_version }}" ]; then
+            CS_VERSION="${{ inputs.code_server_version }}"
+            CS_VERSION="${CS_VERSION#v}"
+          else
+            CS_VERSION=$(curl -s https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name')
+            CS_VERSION="${CS_VERSION#v}"
+          fi
+          echo "code-server: $CS_VERSION"
+
+          # --- Release tag 用 OpenCode 的版本 ---
+          echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
+          echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
+          echo "cs_version=$CS_VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: check_release
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.tag }})
+            https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.oc_tag }})
           if [ "$STATUS" = "200" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release ${{ steps.version.outputs.tag }} already exists"
+            echo "Release ${{ steps.version.outputs.oc_tag }} already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
+      # Release body 里嵌入两个版本号，check-update 靠它们做对比
       - name: Create or update GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: OpenCode ${{ steps.version.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.oc_tag }}
+          name: OpenCode ${{ steps.version.outputs.oc_tag }}
           body: |
-            Docker image for [OpenCode ${{ steps.version.outputs.tag }}](https://github.com/anomalyco/opencode/releases/tag/${{ steps.version.outputs.tag }})
+            Docker image for [OpenCode ${{ steps.version.outputs.oc_tag }}](https://github.com/anomalyco/opencode/releases/tag/${{ steps.version.outputs.oc_tag }})
+
+            <!-- 版本标记（供自动更新检查读取，请勿删除） -->
+            <!-- opencode-version=${{ steps.version.outputs.oc_tag }} -->
+            <!-- code-server-version=${{ steps.version.outputs.cs_version }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -93,7 +118,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=raw,value=${{ steps.version.outputs.tag }},enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=${{ steps.version.outputs.oc_tag }},enable=${{ github.event_name != 'pull_request' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push Docker image
@@ -101,7 +126,8 @@ jobs:
         with:
           context: .
           build-args: |
-            OPENCODE_VERSION=${{ steps.version.outputs.version }}
+            OPENCODE_VERSION=${{ steps.version.outputs.oc_version }}
+            CODE_SERVER_VERSION=${{ steps.version.outputs.cs_version }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
