@@ -6,6 +6,9 @@ services:
       # OpenCode 服务认证（必填）
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
+      # code-server 认证（二选一，推荐使用哈希密码）
+      - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-}
+      - CODE_SERVER_HASHED_PASSWORD=${CODE_SERVER_HASHED_PASSWORD:-}
       # GitHub 集成（可选）
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - GITHUB_SSH_KEY=${GITHUB_SSH_KEY}
@@ -35,6 +38,7 @@ services:
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-}
     ports:
       - "${PORT:-4096}:4096"
+      - "127.0.0.1:${CODE_SERVER_PORT:-18080}:8080"
     cap_add:
       # MicroWARP 所需：WireGuard 内核网卡操作
       - NET_ADMIN
@@ -46,6 +50,7 @@ services:
       - ./workspace:/workspace:rshared
       - ./.config:/home/app/.config:rshared
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
+      - ./.local/share/code-server:/home/app/.local/share/code-server:rshared
       - ./.zread:/home/app/.zread:rshared
       # Lark CLI 凭证持久化（应用配置 + 加密密钥）
       - ./.lark-cli:/home/app/.lark-cli:rshared

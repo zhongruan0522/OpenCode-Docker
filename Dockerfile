@@ -15,6 +15,7 @@ FROM node:22-bookworm-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG OPENCODE_VERSION=latest
+ARG CODE_SERVER_VERSION=4.115.0
 USER root
 WORKDIR /app
 
@@ -29,6 +30,7 @@ RUN apt-get update \
         git \
         bash \
         gosu \
+        supervisor \
         openssh-client \
         python3 \
         python3-pip \
@@ -112,10 +114,16 @@ RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
          echo "Revisions match (${NODE_REVISION}), no symlink needed"; \
        fi \
     && scrapling install --force \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && apt-get update && apt-get install -y gh && rm -rf /var/lib/apt/lists/*
+     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+     && CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
+     && case "${CODE_SERVER_ARCH}" in amd64|arm64) ;; *) echo "Unsupported code-server architecture: ${CODE_SERVER_ARCH}" >&2; exit 1 ;; esac \
+     && curl -fsSLo /tmp/code-server.deb "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_${CODE_SERVER_ARCH}.deb" \
+     && apt-get update \
+     && apt-get install -y /tmp/code-server.deb gh \
+     && rm -f /tmp/code-server.deb \
+     && rm -rf /var/lib/apt/lists/*
 
 ENV LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
@@ -125,12 +133,13 @@ ENV LANG=zh_CN.UTF-8 \
     HOME=/home/app
 
 RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash --uid 10001 app; fi \
-    && mkdir -p /workspace /home/app/.config/opencode /home/app/.cache /etc/wireguard \
+    && mkdir -p /workspace /home/app/.config/opencode /home/app/.config/code-server /home/app/.cache /home/app/.local/share/code-server /etc/wireguard \
     && chown -R app:app /home/app /workspace
 
 RUN chown -R app:app "${PLAYWRIGHT_BROWSERS_PATH}"
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/init-warp.sh
 

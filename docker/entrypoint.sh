@@ -4,6 +4,23 @@ set -e
 : "${OPENCODE_SERVER_USERNAME:?Error: OPENCODE_SERVER_USERNAME is not set. Container will exit.}"
 : "${OPENCODE_SERVER_PASSWORD:?Error: OPENCODE_SERVER_PASSWORD is not set. Container will exit.}"
 
+# code-server 需要显式密码，推荐优先传入哈希密码，避免在宿主机保存明文。
+if [ -z "${CODE_SERVER_PASSWORD:-}" ] && [ -z "${CODE_SERVER_HASHED_PASSWORD:-}" ]; then
+    echo "Error: CODE_SERVER_PASSWORD or CODE_SERVER_HASHED_PASSWORD must be set. Container will exit." >&2
+    exit 1
+fi
+
+# code-server 原生读取 PASSWORD / HASHED_PASSWORD 环境变量，这里统一做一次映射。
+if [ -n "${CODE_SERVER_HASHED_PASSWORD:-}" ]; then
+    export HASHED_PASSWORD="${CODE_SERVER_HASHED_PASSWORD}"
+    unset PASSWORD
+    echo "code-server will use HASHED_PASSWORD authentication."
+else
+    export PASSWORD="${CODE_SERVER_PASSWORD}"
+    unset HASHED_PASSWORD
+    echo "code-server will use PASSWORD authentication."
+fi
+
 echo "Environment validation passed."
 echo "Username: $OPENCODE_SERVER_USERNAME"
 
@@ -43,7 +60,7 @@ if [ -n "$GITHUB_SSH_KEY" ]; then
 fi
 
 # ==========================================
-# UID/GID 映射并启动 OpenCode
+# UID/GID 映射并启动多服务
 # ==========================================
 if [ "$(id -u)" = '0' ]; then
     LOCAL_UID=${LOCAL_UID:-10001}
@@ -55,9 +72,11 @@ if [ "$(id -u)" = '0' ]; then
         usermod -o -u "$LOCAL_UID" -g "$LOCAL_GID" app
     fi
 
+    # 提前创建并修正 code-server 的配置/数据目录，避免首次启动时权限错乱。
+    mkdir -p /home/app/.config/code-server /home/app/.local/share/code-server
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
-    exec gosu app opencode serve --hostname 0.0.0.0
+    exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
 fi
 
-exec opencode serve --hostname 0.0.0.0
+exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
