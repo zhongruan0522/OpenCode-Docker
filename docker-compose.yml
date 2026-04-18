@@ -3,15 +3,13 @@ services:
   opencode:
     image: ghcr.io/zhongruan0522/opencode-docker:latest
     environment:
-      # OpenCode 服务认证（必填）
+      # OpenCode 服务认证
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
-      # code-server 认证（二选一，推荐使用哈希密码）
+      # code-server 认证
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-}
-      - CODE_SERVER_HASHED_PASSWORD=${CODE_SERVER_HASHED_PASSWORD:-}
-      # GitHub 集成（可选）
+      # GitHub
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - GITHUB_SSH_KEY=${GITHUB_SSH_KEY}
       # Playwright 浏览器配置
       - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
       - PLAYWRIGHT_MCP_HEADLESS=1
@@ -20,31 +18,22 @@ services:
       # UID/GID 映射
       - LOCAL_UID=${LOCAL_UID:-10001}
       - LOCAL_GID=${LOCAL_GID:-10001}
-      # ===== MicroWARP SOCKS5 代理配置 =====
-      # 设为 1 启用 Cloudflare WARP 内部代理，默认关闭
-      - ENABLE_WARP=${ENABLE_WARP:-0}
-      # SOCKS5 监听端口（仅 127.0.0.1，不对外暴露）
+      # ===== MicroWARP =====
+      - ENABLE_WARP=${ENABLE_WARP:-1}
       - WARP_SOCKS_PORT=${WARP_SOCKS_PORT:-1080}
-      # SOCKS5 认证（可选，留空则无密码）
       - SOCKS_USER=${SOCKS_USER:-}
       - SOCKS_PASS=${SOCKS_PASS:-}
-      # 自定义 WARP Endpoint IP（可选，用于绕过 QoS 限制）
       - ENDPOINT_IP=${ENDPOINT_IP:-}
-      # GitHub 代理前缀（可选，加速 wgcf 二进制下载）
       - GH_PROXY=${GH_PROXY:-}
-      # Tailscale 回程路由 CIDR（可选，默认 100.64.0.0/10）
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-}
-      # 私网绕过 CIDR 列表（空格分隔），默认绕过 RFC1918/链路本地/Tailscale
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-}
     ports:
       - "${PORT:-4096}:4096"
       - "127.0.0.1:${CODE_SERVER_PORT:-18080}:8080"
     cap_add:
-      # MicroWARP 所需：WireGuard 内核网卡操作
       - NET_ADMIN
       - SYS_MODULE
     sysctls:
-      # WireGuard 所需的源地址验证标记
       - net.ipv4.conf.all.src_valid_mark=1
     volumes:
       # === 工作区 ===
