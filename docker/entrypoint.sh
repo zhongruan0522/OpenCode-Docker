@@ -1,28 +1,25 @@
 #!/bin/bash
 set -e
 
-: "${OPENCODE_SERVER_USERNAME:?Error: OPENCODE_SERVER_USERNAME is not set. Container will exit.}"
-: "${OPENCODE_SERVER_PASSWORD:?Error: OPENCODE_SERVER_PASSWORD is not set. Container will exit.}"
-
-# code-server 需要显式密码，推荐优先传入哈希密码，避免在宿主机保存明文。
-if [ -z "${CODE_SERVER_PASSWORD:-}" ] && [ -z "${CODE_SERVER_HASHED_PASSWORD:-}" ]; then
-    echo "Error: CODE_SERVER_PASSWORD or CODE_SERVER_HASHED_PASSWORD must be set. Container will exit." >&2
+# 至少需要配置一组认证凭据，否则无安全保证，直接退出。
+if [ -z "${CODE_SERVER_PASSWORD:-}" ] && [ -z "${OPENCODE_SERVER_USERNAME:-}" ] && [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+    echo "Error: At least one of CODE_SERVER_PASSWORD, OPENCODE_SERVER_USERNAME, OPENCODE_SERVER_PASSWORD must be set." >&2
+    echo "Container will exit." >&2
     exit 1
 fi
 
-# code-server 原生读取 PASSWORD / HASHED_PASSWORD 环境变量，这里统一做一次映射。
+# code-server 认证：优先使用哈希密码，其次明文密码。
 if [ -n "${CODE_SERVER_HASHED_PASSWORD:-}" ]; then
     export HASHED_PASSWORD="${CODE_SERVER_HASHED_PASSWORD}"
     unset PASSWORD
     echo "code-server will use HASHED_PASSWORD authentication."
-else
+elif [ -n "${CODE_SERVER_PASSWORD:-}" ]; then
     export PASSWORD="${CODE_SERVER_PASSWORD}"
     unset HASHED_PASSWORD
     echo "code-server will use PASSWORD authentication."
+else
+    echo "Warning: CODE_SERVER_PASSWORD is not set. code-server will run without authentication." >&2
 fi
-
-echo "Environment validation passed."
-echo "Username: $OPENCODE_SERVER_USERNAME"
 
 # ==========================================
 # MicroWARP 初始化（可选，通过 ENABLE_WARP=1 开启）

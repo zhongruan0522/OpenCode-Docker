@@ -51,8 +51,8 @@ services:
       - ./.lark-cli:/home/app/.lark-cli:rshared
       - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared
       # === git 配置 ===
-      - ./app-config/git-credentials:/home/app/.git-credentials:rshared
-      - ./app-config/gitconfig:/home/app/.gitconfig:rshared
+      - ./app-config/.git-credentials:/home/app/.git-credentials:rshared
+      - ./app-config/.gitconfig:/home/app/.gitconfig:rshared
       # === code-server ===
       - ./.local/share/code-server:/home/app/.local/share/code-server:rshared
     networks:
