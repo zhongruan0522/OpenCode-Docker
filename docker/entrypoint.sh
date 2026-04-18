@@ -1,9 +1,13 @@
 #!/bin/bash
 set -e
 
-# 至少需要配置一组认证凭据，否则无安全保证，直接退出。
-if [ -z "${CODE_SERVER_PASSWORD:-}" ] && [ -z "${OPENCODE_SERVER_USERNAME:-}" ] && [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
-    echo "Error: At least one of CODE_SERVER_PASSWORD, OPENCODE_SERVER_USERNAME, OPENCODE_SERVER_PASSWORD must be set." >&2
+# 三个认证凭据必须全部设置，否则退出。
+MISSING=""
+[ -z "${CODE_SERVER_PASSWORD:-}" ] && MISSING="CODE_SERVER_PASSWORD $MISSING"
+[ -z "${OPENCODE_SERVER_USERNAME:-}" ] && MISSING="OPENCODE_SERVER_USERNAME $MISSING"
+[ -z "${OPENCODE_SERVER_PASSWORD:-}" ] && MISSING="OPENCODE_SERVER_PASSWORD $MISSING"
+if [ -n "$MISSING" ]; then
+    echo "Error: Missing required environment variables: $MISSING" >&2
     echo "Container will exit." >&2
     exit 1
 fi
