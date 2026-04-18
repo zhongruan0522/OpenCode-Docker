@@ -54,6 +54,8 @@ services:
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
       # === Zread ===
       - ./.zread:/home/app/.zread:rshared
+      # === OpenAI Codex ===
+      - ./.codex:/home/app/.codex:rshared
       # === WRAP代理 ===
       - warp-data:/etc/wireguard
       # === 飞书CLI ===
