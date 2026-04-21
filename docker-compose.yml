@@ -1,24 +1,34 @@
-version: '3.8'
 services:
   opencode:
-    image: ghcr.io/zhongruan0522/opencode-docker:latest
+    image: ghcr.io/zhongruan0522/opencode-docker:${OPENCODE_SERVER_VERSION:1.14.19}
+    container_name: opencode
+    ports:
+      # Codex登录端口
+      - "0.0.0.0:1455:1455"
+      # OpenCode端口
+      - "127.0.0.1:4096:4096"
+      # Code-Serve端口
+      - "127.0.0.1:4097:8080"
+      # Zread 端口
+      - "0.0.0.0:9681:9681"
     environment:
-      # OpenCode 服务认证
+      # OpenCode
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
-      # code-server 认证
+      - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:true}
+      # Code-Server
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-}
       # GitHub
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      # Playwright 浏览器配置
+      # Playwright
       - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
       - PLAYWRIGHT_MCP_HEADLESS=1
       - PLAYWRIGHT_MCP_BROWSER=chromium
       - PLAYWRIGHT_MCP_NO_SANDBOX=1
-      # UID/GID 映射
+      # UID/GID
       - LOCAL_UID=${LOCAL_UID:-10001}
       - LOCAL_GID=${LOCAL_GID:-10001}
-      # ===== MicroWARP =====
+      # MicroWARP
       - ENABLE_WARP=${ENABLE_WARP:-1}
       - WARP_SOCKS_PORT=${WARP_SOCKS_PORT:-1080}
       - SOCKS_USER=${SOCKS_USER:-}
@@ -27,9 +37,6 @@ services:
       - GH_PROXY=${GH_PROXY:-}
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-}
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-}
-    ports:
-      - "${PORT:-4096}:4096"
-      - "127.0.0.1:${CODE_SERVER_PORT:-18080}:8080"
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -38,23 +45,32 @@ services:
     volumes:
       # === 工作区 ===
       - ./workspace:/workspace:rshared
-      # === opencode 配置 ===
+      
+      # 主服务
+      # === Git 配置 ===
+      - ./app-config/.git-credentials:/home/app/.git-credentials:rshared
+      - ./app-config/.gitconfig:/home/app/.gitconfig:rshared
+      # === Code-Server ===
+      - ./.local/share/code-server:/home/app/.local/share/code-server:rshared
+      
+      # AI CLI
+      # === OpenCode 配置 ===
       - ./.config/opencode:/home/app/.config/opencode:rshared
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
-      # === Zread ===
-      - ./.zread:/home/app/.zread:rshared
+      # === Claude Code ===
+      - ./app-config/.claude.json:/home/app/:rshared
+      - ./.claude:/home/app/.claude:rshared
       # === OpenAI Codex ===
       - ./.codex:/home/app/.codex:rshared
+      # === Zread ===
+      - ./.zread:/home/app/.zread:rshared
+      
+      # 其他
       # === WRAP代理 ===
       - warp-data:/etc/wireguard
       # === 飞书CLI ===
       - ./.lark-cli:/home/app/.lark-cli:rshared
       - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared
-      # === git 配置 ===
-      - ./app-config/.git-credentials:/home/app/.git-credentials:rshared
-      - ./app-config/.gitconfig:/home/app/.gitconfig:rshared
-      # === code-server ===
-      - ./.local/share/code-server:/home/app/.local/share/code-server:rshared
     networks:
       - 1panel-network
     restart: unless-stopped
