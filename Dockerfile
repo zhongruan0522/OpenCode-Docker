@@ -81,7 +81,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
 
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
-    && npm install -g @z_ai/mcp-server@0.1.3 zread_cli @larksuite/cli @openai/codex opencode-tool-search \
+    && npm install -g @z_ai/mcp-server@0.1.3 zread_cli @larksuite/cli @openai/codex opencode-tool-search @anthropic-ai/claude-code \
     && python3 -m pip install --no-cache-dir --break-system-packages \
          Pillow \
          "scrapling[all]>=0.4.2" \
