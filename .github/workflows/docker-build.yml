@@ -75,6 +75,8 @@ jobs:
           # --- Codex 版本 ---
           if [ -n "${{ inputs.codex_version }}" ]; then
             CODEX_VERSION="${{ inputs.codex_version }}"
+            # 兼容手动输入完整 tag（如 rust-v0.122.0 或 v0.122.0）
+            CODEX_VERSION="${CODEX_VERSION#rust-v}"
             CODEX_VERSION="${CODEX_VERSION#v}"
           else
             CODEX_TAG=$(curl -s https://api.github.com/repos/openai/codex/releases/latest | jq -r '.tag_name')
