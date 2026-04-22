@@ -48,6 +48,7 @@ RUN apt-get update \
         python-is-python3 \
         poppler-utils \
         fonts-noto-cjk \
+        bubblewrap \
     # WireGuard 和网络工具（MicroWARP 依赖）
         wireguard-tools \
         iptables \
