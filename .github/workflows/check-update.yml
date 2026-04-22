@@ -34,6 +34,21 @@ jobs:
           echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
           echo "code-server latest: $LATEST"
 
+      - name: Get Codex latest release
+        id: codex
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/openai/codex/releases/latest | jq -r '.tag_name')
+          # Codex 的 tag 格式为 rust-v{version}，剥离前缀
+          echo "version=${LATEST#rust-v}" >> $GITHUB_OUTPUT
+          echo "Codex latest: $LATEST"
+
+      - name: Get Claude Code latest version
+        id: claudecode
+        run: |
+          LATEST=$(curl -s https://registry.npmjs.org/@anthropic-ai/claude-code/latest | jq -r '.version')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Claude Code latest: $LATEST"
+
       # ==========================================
       # 获取我们上次记录的版本（从 release body 提取）
       # ==========================================
@@ -44,11 +59,17 @@ jobs:
           if [ -n "$BODY" ]; then
             LOCAL_OPENCODE=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
             LOCAL_CODESERVER=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
+            LOCAL_CODEX=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
+            LOCAL_CLAUDECODE=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
           fi
           echo "opencode=${LOCAL_OPENCODE:-none}" >> $GITHUB_OUTPUT
           echo "codeserver=${LOCAL_CODESERVER:-none}" >> $GITHUB_OUTPUT
+          echo "codex=${LOCAL_CODEX:-none}" >> $GITHUB_OUTPUT
+          echo "claudecode=${LOCAL_CLAUDECODE:-none}" >> $GITHUB_OUTPUT
           echo "Our OpenCode: ${LOCAL_OPENCODE:-none}"
           echo "Our code-server: ${LOCAL_CODESERVER:-none}"
+          echo "Our Codex: ${LOCAL_CODEX:-none}"
+          echo "Our Claude Code: ${LOCAL_CLAUDECODE:-none}"
 
       # ==========================================
       # 比对版本，任意一个有更新就触发构建
@@ -74,6 +95,22 @@ jobs:
             echo "code-server up to date: ${{ steps.codeserver.outputs.version }}"
           fi
 
+          # Codex 对比
+          if [ "${{ steps.local.outputs.codex }}" != "${{ steps.codex.outputs.version }}" ]; then
+            HAS_UPDATE="true"
+            echo "Codex needs update: ${{ steps.local.outputs.codex }} -> ${{ steps.codex.outputs.version }}"
+          else
+            echo "Codex up to date: ${{ steps.codex.outputs.version }}"
+          fi
+
+          # Claude Code 对比
+          if [ "${{ steps.local.outputs.claudecode }}" != "${{ steps.claudecode.outputs.version }}" ]; then
+            HAS_UPDATE="true"
+            echo "Claude Code needs update: ${{ steps.local.outputs.claudecode }} -> ${{ steps.claudecode.outputs.version }}"
+          else
+            echo "Claude Code up to date: ${{ steps.claudecode.outputs.version }}"
+          fi
+
           echo "has_update=$HAS_UPDATE" >> $GITHUB_OUTPUT
 
       - name: Trigger build
@@ -88,6 +125,8 @@ jobs:
               ref: 'main',
               inputs: {
                 opencode_version: '${{ steps.opencode.outputs.version }}',
-                code_server_version: '${{ steps.codeserver.outputs.version }}'
+                code_server_version: '${{ steps.codeserver.outputs.version }}',
+                codex_version: '${{ steps.codex.outputs.version }}',
+                claude_code_version: '${{ steps.claudecode.outputs.version }}'
               }
             });

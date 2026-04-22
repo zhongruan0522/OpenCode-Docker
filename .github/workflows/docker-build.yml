@@ -19,6 +19,16 @@ on:
         required: false
         default: ''
         type: string
+      codex_version:
+        description: 'Codex CLI version (e.g. 0.122.0). Leave empty for latest.'
+        required: false
+        default: ''
+        type: string
+      claude_code_version:
+        description: 'Claude Code version (e.g. 2.1.117). Leave empty for latest.'
+        required: false
+        default: ''
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -36,7 +46,7 @@ jobs:
         uses: actions/checkout@v6
 
       # ==========================================
-      # 解析两个组件的版本号
+      # 解析各组件的版本号
       # ==========================================
       - name: Resolve versions
         id: version
@@ -62,10 +72,31 @@ jobs:
           fi
           echo "code-server: $CS_VERSION"
 
+          # --- Codex 版本 ---
+          if [ -n "${{ inputs.codex_version }}" ]; then
+            CODEX_VERSION="${{ inputs.codex_version }}"
+            CODEX_VERSION="${CODEX_VERSION#v}"
+          else
+            CODEX_TAG=$(curl -s https://api.github.com/repos/openai/codex/releases/latest | jq -r '.tag_name')
+            CODEX_VERSION="${CODEX_TAG#rust-v}"
+          fi
+          echo "Codex: $CODEX_VERSION"
+
+          # --- Claude Code 版本 ---
+          if [ -n "${{ inputs.claude_code_version }}" ]; then
+            CC_VERSION="${{ inputs.claude_code_version }}"
+            CC_VERSION="${CC_VERSION#v}"
+          else
+            CC_VERSION=$(curl -s https://registry.npmjs.org/@anthropic-ai/claude-code/latest | jq -r '.version')
+          fi
+          echo "Claude Code: $CC_VERSION"
+
           # --- Release tag 用 OpenCode 的版本 ---
           echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
           echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
           echo "cs_version=$CS_VERSION" >> $GITHUB_OUTPUT
+          echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
+          echo "cc_version=$CC_VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: check_release
@@ -79,7 +110,7 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      # Release body 里嵌入两个版本号，check-update 靠它们做对比
+      # Release body 里嵌入版本号，check-update 靠它们做对比
       - name: Create or update GitHub Release
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
@@ -92,6 +123,8 @@ jobs:
             <!-- 版本标记（供自动更新检查读取，请勿删除） -->
             <!-- opencode-version=${{ steps.version.outputs.oc_tag }} -->
             <!-- code-server-version=${{ steps.version.outputs.cs_version }} -->
+            <!-- codex-version=${{ steps.version.outputs.codex_version }} -->
+            <!-- claude-code-version=${{ steps.version.outputs.cc_version }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -126,6 +159,8 @@ jobs:
           build-args: |
             OPENCODE_VERSION=${{ steps.version.outputs.oc_version }}
             CODE_SERVER_VERSION=${{ steps.version.outputs.cs_version }}
+            CODEX_VERSION=${{ steps.version.outputs.codex_version }}
+            CLAUDE_CODE_VERSION=${{ steps.version.outputs.cc_version }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

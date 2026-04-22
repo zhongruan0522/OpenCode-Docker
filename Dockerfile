@@ -11,11 +11,13 @@ RUN git clone https://github.com/rofl0r/microsocks.git /src && \
 # ==========================================
 # 阶段 2：主运行环境
 # ==========================================
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG OPENCODE_VERSION=latest
 ARG CODE_SERVER_VERSION=4.115.0
+ARG CODEX_VERSION=latest
+ARG CLAUDE_CODE_VERSION=latest
 USER root
 WORKDIR /app
 
@@ -80,9 +82,10 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     PLAYWRIGHT_MCP_NO_SANDBOX=1 \
     WARP_SOCKS_PORT=1080
 
-RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
+RUN npm install -g npm@latest \
+    && npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
-    && npm install -g @z_ai/mcp-server@0.1.3 zread_cli @larksuite/cli @openai/codex @anthropic-ai/claude-code \
+    && npm install -g @z_ai/mcp-server@0.1.3 zread_cli @larksuite/cli @openai/codex@${CODEX_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && python3 -m pip install --no-cache-dir --break-system-packages \
          Pillow \
          "scrapling[all]>=0.4.2" \
