@@ -63,11 +63,11 @@ RUN apt-get update \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
 
-# Go + Bun（同层清理 Go 源码/测试）
+# Go + Bun（仅清理文档/测试等非运行必需文件，保留 src 和 pkg/linux_amd64 以确保编译可用）
 RUN curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
     && curl -fsSL https://bun.sh/install | bash \
     && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
-    && rm -rf /usr/local/go/src /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api
+    && rm -rf /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api
 
 # microsocks
 COPY --from=microsocks-builder /src/microsocks /usr/local/bin/microsocks
@@ -135,7 +135,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 USER root
 WORKDIR /app
 
-# 仅运行时依赖（无 build-essential）
+# 仅运行时依赖（含 gcc 以支持 CGO）
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         locales \
@@ -167,6 +167,7 @@ RUN apt-get update \
         iptables \
         iproute2 \
         kmod \
+        gcc \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
@@ -183,7 +184,7 @@ COPY --from=builder /usr/bin/gh /usr/bin/gh
 # Playwright Chromium 浏览器
 COPY --from=builder /home/app/.cache/ms-playwright /home/app/.cache/ms-playwright
 
-ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}" \
+ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
