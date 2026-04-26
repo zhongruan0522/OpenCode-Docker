@@ -205,13 +205,14 @@ RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash
     && chown -R app:app /home/app /workspace "${PLAYWRIGHT_BROWSERS_PATH}"
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/init-warp.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh
 
 WORKDIR /workspace
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fs http://127.0.0.1:9001/ || exit 1
+    CMD /usr/local/bin/healthcheck.sh
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
