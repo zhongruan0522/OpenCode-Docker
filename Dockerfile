@@ -211,4 +211,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/init-warp.sh
 
 WORKDIR /workspace
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -fs http://127.0.0.1:9001/ || exit 1
+
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

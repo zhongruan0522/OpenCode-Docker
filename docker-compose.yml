@@ -71,6 +71,12 @@ services:
       # === 飞书CLI ===
       - ./.lark-cli:/home/app/.lark-cli:rshared
       - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://127.0.0.1:9001/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
     networks:
       - 1panel-network
     restart: unless-stopped
