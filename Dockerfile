@@ -23,9 +23,10 @@ ARG CLAUDE_CODE_VERSION=latest
 ARG PLAYWRIGHT_MCP_VERSION=0.0.70
 
 ENV GOLANG_VERSION=1.26.1
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     BUN_INSTALL=/opt/bun
-ENV PATH="/usr/local/go/bin:/opt/bun/bin:${PATH}"
+ENV PATH="/usr/local/go/bin:/opt/bun/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 
 # 系统依赖（含 build-essential，构建完就扔）
 RUN apt-get update \
@@ -43,6 +44,7 @@ RUN apt-get update \
         python3-pip \
         python3-venv \
         build-essential \
+        openjdk-17-jdk-headless \
         vim \
         wget \
         unzip \
@@ -68,6 +70,20 @@ RUN curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-archit
     && curl -fsSL https://bun.sh/install | bash \
     && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
     && rm -rf /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api
+
+# Android SDK（command-line tools + build-tools + platform-tools + platforms）
+RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
+    && curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip \
+    && unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools \
+    && mv /tmp/cmdline-tools/cmdline-tools "${ANDROID_SDK_ROOT}/cmdline-tools/latest" \
+    && rm -rf /tmp/cmdline-tools.zip /tmp/cmdline-tools \
+    && yes | sdkmanager --licenses > /dev/null 2>&1 \
+    && sdkmanager --install \
+        "build-tools;35.0.1" \
+        "platform-tools" \
+        "platforms;android-35" \
+        "platforms;android-34" \
+    && rm -rf "${ANDROID_SDK_ROOT}/.temp"
 
 # microsocks
 COPY --from=microsocks-builder /src/microsocks /usr/local/bin/microsocks
@@ -168,9 +184,14 @@ RUN apt-get update \
         iproute2 \
         kmod \
         gcc \
+        openjdk-17-jdk-headless \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
+
+# 创建架构无关的 JAVA_HOME 符号链接
+RUN JAVA_REAL_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")" \
+    && ln -sf "${JAVA_REAL_HOME}" /usr/lib/jvm/java-17-openjdk-current
 
 # 从 builder 复制所有构建产物
 # /usr/local 包含：Go SDK、npm 全局包、pip 安装包、全局二进制 symlink
@@ -184,7 +205,10 @@ COPY --from=builder /usr/bin/gh /usr/bin/gh
 # Playwright Chromium 浏览器
 COPY --from=builder /home/app/.cache/ms-playwright /home/app/.cache/ms-playwright
 
-ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:${PATH}" \
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
+    ANDROID_SDK_ROOT=/opt/android-sdk
+
+ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
