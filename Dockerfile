@@ -71,7 +71,7 @@ RUN curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-archit
     && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
     && rm -rf /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api
 
-# Android SDK（command-line tools + build-tools + platform-tools + platforms）
+# Android SDK（command-line tools + build-tools + platform-tools + platforms + Gradle）
 RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
     && curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip \
     && unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools \
@@ -80,10 +80,21 @@ RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
     && yes | sdkmanager --licenses > /dev/null 2>&1 \
     && sdkmanager --install \
         "build-tools;35.0.1" \
+        "build-tools;30.0.2" \
         "platform-tools" \
         "platforms;android-35" \
         "platforms;android-34" \
+        "platforms;android-30" \
     && rm -rf "${ANDROID_SDK_ROOT}/.temp"
+
+# Gradle 7.5 + 9.0
+ENV GRADLE_HOME=/opt/gradle
+RUN curl -fsSL "https://services.gradle.org/distributions/gradle-7.5-bin.zip" -o /tmp/gradle-7.5.zip \
+    && unzip -q /tmp/gradle-7.5.zip -d /opt \
+    && curl -fsSL "https://services.gradle.org/distributions/gradle-9.0-bin.zip" -o /tmp/gradle-9.0.zip \
+    && unzip -q /tmp/gradle-9.0.zip -d /opt \
+    && ln -sf /opt/gradle-9.0/bin/gradle /usr/local/bin/gradle \
+    && rm -f /tmp/gradle-7.5.zip /tmp/gradle-9.0.zip
 
 # microsocks
 COPY --from=microsocks-builder /src/microsocks /usr/local/bin/microsocks
@@ -208,7 +219,7 @@ COPY --from=builder /home/app/.cache/ms-playwright /home/app/.cache/ms-playwrigh
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     ANDROID_SDK_ROOT=/opt/android-sdk
 
-ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PATH}" \
+ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/gradle-9.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
