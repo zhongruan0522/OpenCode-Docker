@@ -62,9 +62,7 @@ services:
       - ./.claude:/home/app/.claude:rshared
       # === OpenAI Codex ===
       - ./.codex:/home/app/.codex:rshared
-      # === Zread ===
-      - ./.zread:/home/app/.zread:rshared
-      
+
       # 其他
       # === WRAP代理 ===
       - warp-data:/etc/wireguard

@@ -115,7 +115,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g opencode-ai@${OPENCODE_VERSION} \
     && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
-    && npm install -g @z_ai/mcp-server@0.1.3 zread_cli @larksuite/cli @openai/codex@${CODEX_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    && npm install -g @z_ai/mcp-server@0.1.3 @larksuite/cli @openai/codex@${CODEX_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline-musl \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl
