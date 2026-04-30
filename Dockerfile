@@ -93,7 +93,7 @@ RUN curl -fsSL "https://services.gradle.org/distributions/gradle-7.5-bin.zip" -o
     && unzip -q /tmp/gradle-7.5.zip -d /opt \
     && curl -fsSL "https://services.gradle.org/distributions/gradle-9.0-bin.zip" -o /tmp/gradle-9.0.zip \
     && unzip -q /tmp/gradle-9.0.zip -d /opt \
-    && ln -sf /opt/gradle-9.0/bin/gradle /usr/local/bin/gradle \
+    && ln -sf /opt/gradle-9.0.0/bin/gradle /usr/local/bin/gradle \
     && rm -f /tmp/gradle-7.5.zip /tmp/gradle-9.0.zip
 
 # microsocks
@@ -162,7 +162,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 USER root
 WORKDIR /app
 
-# 仅运行时依赖（含 gcc 以支持 CGO）
+# 运行时依赖（含 gcc 以支持 CGO）+ Playwright Chromium 系统库
+# 注：builder 阶段 `playwright install --with-deps` 只在 builder 层安装了这些库，
+# multi-stage COPY 不会带走 apt 安装的系统包，必须在 final 阶段显式声明。
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         locales \
@@ -196,6 +198,23 @@ RUN apt-get update \
         kmod \
         gcc \
         openjdk-17-jdk-headless \
+        libnss3 \
+        libnspr4 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libgbm1 \
+        libxkbcommon0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxrandr2 \
+        libasound2 \
+        libatspi2.0-0 \
+        libpango-1.0-0 \
+        libcairo2 \
+        libdbus-1-3 \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
@@ -219,7 +238,7 @@ COPY --from=builder /home/app/.cache/ms-playwright /home/app/.cache/ms-playwrigh
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     ANDROID_SDK_ROOT=/opt/android-sdk
 
-ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/gradle-9.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PATH}" \
+ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
