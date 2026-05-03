@@ -57,9 +57,6 @@ services:
       # === OpenCode 配置 ===
       - ./.config/opencode:/home/app/.config/opencode:rshared
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
-      # === Claude Code ===
-      - ./app-config/.claude.json:/home/app/:rshared
-      - ./.claude:/home/app/.claude:rshared
       # === OpenAI Codex ===
       - ./.codex:/home/app/.codex:rshared
 
