@@ -218,6 +218,14 @@ RUN apt-get update \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CE（DinD 模式：容器内运行独立 dockerd，重启即复原）
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce docker-ce-cli docker-compose-plugin iptables \
+    && rm -rf /var/lib/apt/lists/*
+
 # 创建架构无关的 JAVA_HOME 符号链接
 RUN JAVA_REAL_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")" \
     && ln -sf "${JAVA_REAL_HOME}" /usr/lib/jvm/java-17-openjdk-current

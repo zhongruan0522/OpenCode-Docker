@@ -37,6 +37,7 @@ services:
       - GH_PROXY=${GH_PROXY:-}
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-}
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-}
+    privileged: true
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
