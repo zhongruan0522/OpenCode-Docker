@@ -11,7 +11,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-base:
@@ -36,6 +35,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract lowercased image name
+        id: meta
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository }}"
+          echo "image=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Build and push base image
         uses: docker/build-push-action@v7
         with:
@@ -43,7 +48,6 @@ jobs:
           file: Dockerfile.base
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:base
+          tags: ${{ steps.meta.outputs.image }}:base
           cache-from: type=gha
           cache-to: type=gha,mode=max
