@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: read
+      packages: write
 
     steps:
       - name: Checkout repository
