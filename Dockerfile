@@ -196,6 +196,18 @@ RUN apt-get update \
         iproute2 \
         kmod \
         gcc \
+        # 常用网络/系统诊断工具
+        lsof \
+        net-tools \
+        procps \
+        dnsutils \
+        netcat-openbsd \
+        strace \
+        htop \
+        tree \
+        file \
+        less \
+        jq \
         openjdk-17-jdk-headless \
         libnss3 \
         libnspr4 \
