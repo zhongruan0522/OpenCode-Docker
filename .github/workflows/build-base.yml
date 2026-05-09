@@ -7,6 +7,9 @@ on:
     paths:
       - 'Dockerfile.base'
       - 'docker/**'
+  schedule:
+    # 每周一北京时间 04:00 (UTC 周日 20:00)
+    - cron: '0 20 * * 0'
   workflow_dispatch:
 
 env:
