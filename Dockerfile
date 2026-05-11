@@ -23,12 +23,9 @@ RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
     && rm -rf /var/lib/apt/lists/*
 
 # npm 全局包（自动更新检测的组件）
-ARG WRANGLER_VERSION=latest
-
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g opencode-ai@${OPENCODE_VERSION} \
     && npm install -g @openai/codex@${CODEX_VERSION} \
-    && npm install -g wrangler@${WRANGLER_VERSION} \
     && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline-musl \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl

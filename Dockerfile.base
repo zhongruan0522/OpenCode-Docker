@@ -22,6 +22,7 @@ FROM node:24-bookworm-slim AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PLAYWRIGHT_MCP_VERSION=0.0.70
+ARG WRANGLER_VERSION=latest
 
 ENV GOLANG_VERSION=1.26.1
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
@@ -111,7 +112,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # Playwright MCP（仅安装 npm 包，浏览器在下面单独装）
 RUN --mount=type=cache,target=/root/.npm \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
-    && npm install -g @z_ai/mcp-server@0.1.3 @larksuite/cli
+    && npm install -g @z_ai/mcp-server@0.1.3 @larksuite/cli \
+    && npm install -g wrangler@${WRANGLER_VERSION}
 
 # Python 包
 RUN --mount=type=cache,target=/root/.cache/pip \
