@@ -19,6 +19,7 @@ jobs:
   build-base:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       packages: write
 
     steps:
@@ -54,3 +55,21 @@ jobs:
           tags: ${{ steps.meta.outputs.image }}:base
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  trigger-dynamic:
+    needs: build-base
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+
+    steps:
+      - name: Trigger dynamic layer build
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'docker-build.yml',
+              ref: 'main'
+            });
