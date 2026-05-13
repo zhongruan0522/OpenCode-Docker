@@ -12,6 +12,7 @@ FROM ${BASE_IMAGE}
 ARG OPENCODE_VERSION=latest
 ARG CODE_SERVER_VERSION=4.115.0
 ARG CODEX_VERSION=latest
+ARG SERENA_VERSION=latest
 
 # code-server（自动更新检测）
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -29,3 +30,8 @@ RUN --mount=type=cache,target=/root/.npm \
     && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline-musl \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl
+
+# serena-agent（自动更新检测，通过 uv tool 安装）
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
+    && serena init

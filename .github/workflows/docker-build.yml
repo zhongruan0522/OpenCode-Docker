@@ -30,6 +30,11 @@ on:
         required: false
         default: ''
         type: string
+      serena_version:
+        description: 'serena-agent version (e.g. 0.1.0). Leave empty for latest.'
+        required: false
+        default: ''
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -83,10 +88,19 @@ jobs:
           fi
           echo "Codex: $CODEX_VERSION"
 
+          # --- serena-agent 版本 ---
+          if [ -n "${{ inputs.serena_version }}" ]; then
+            SERENA_VERSION="${{ inputs.serena_version }}"
+          else
+            SERENA_VERSION=$(curl -s https://pypi.org/pypi/serena-agent/json | jq -r '.info.version')
+          fi
+          echo "serena-agent: $SERENA_VERSION"
+
           echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
           echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
           echo "cs_version=$CS_VERSION" >> $GITHUB_OUTPUT
           echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
+          echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: check_release
@@ -113,6 +127,7 @@ jobs:
             <!-- opencode-version=${{ steps.version.outputs.oc_tag }} -->
             <!-- code-server-version=${{ steps.version.outputs.cs_version }} -->
             <!-- codex-version=${{ steps.version.outputs.codex_version }} -->
+            <!-- serena-version=${{ steps.version.outputs.serena_version }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -142,6 +157,7 @@ jobs:
             OPENCODE_VERSION=${{ steps.version.outputs.oc_version }}
             CODE_SERVER_VERSION=${{ steps.version.outputs.cs_version }}
             CODEX_VERSION=${{ steps.version.outputs.codex_version }}
+            SERENA_VERSION=${{ steps.version.outputs.serena_version }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
