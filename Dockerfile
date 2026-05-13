@@ -33,5 +33,9 @@ RUN --mount=type=cache,target=/root/.npm \
 
 # serena-agent（自动更新检测，通过 uv tool 安装）
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
+    if ! command -v uv >/dev/null 2>&1; then \
+      curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/tmp/uv-cargo UV_INSTALL_DIR=/usr/local/bin sh \
+      && rm -rf /tmp/uv-cargo; \
+    fi \
+    && uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
     && serena init
