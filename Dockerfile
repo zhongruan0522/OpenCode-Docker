@@ -37,5 +37,5 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/tmp/uv-cargo UV_INSTALL_DIR=/usr/local/bin sh \
       && rm -rf /tmp/uv-cargo; \
     fi \
-    && uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
+    && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
     && serena init
