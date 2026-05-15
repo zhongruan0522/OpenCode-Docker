@@ -73,6 +73,9 @@ RUN curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-archit
     && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
     && rm -rf /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api
 
+# gopls (Go 语言服务器)
+RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest
+
 # Android SDK
 RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
     && curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip \
