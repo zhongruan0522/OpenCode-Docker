@@ -64,6 +64,8 @@ services:
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
       # === OpenAI Codex ===
       - ./.codex:/home/app/.codex:rshared
+      # === Serena MCP ===
+      - ./.serena:/home/app/.serena:rshared
 
       # 其他
       # === WRAP代理 ===
