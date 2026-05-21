@@ -58,24 +58,31 @@ services:
       # === Git 配置 ===
       - ./app-config/.git-credentials:/home/app/.git-credentials:rshared
       - ./app-config/.gitconfig:/home/app/.gitconfig:rshared
+      - ./.config/gh:/home/app/.config/gh:rshared
       # === Code-Server ===
       - ./.local/share/code-server:/home/app/.local/share/code-server:rshared
+      - ./.config/code-server:/home/app/.config/code-server:rshared
       
-      # AI CLI
+      # CLI
       # === OpenCode 配置 ===
-      - ./.config/opencode:/home/app/.config/opencode:rshared
+      - ./.config/opencode/agents:/home/app/.config/opencode/agents:rshared
+      - ./.config/opencode/plugins:/home/app/.config/opencode/plugins:rshared
+      - ./.config/opencode/skills:/home/app/.config/opencode/skills:rshared
+      - ./.config/opencode/AGENTS.md:/home/app/.config/opencode/AGENTS.md:rshared
+      - ./.config/opencode/opencode.json:/home/app/.config/opencode/opencode.json:rshared
       - ./.local/share/opencode:/home/app/.local/share/opencode:rshared
+      # === OpenCode 附属依赖 - Serena ===
+      - ./.serena:/home/app/.serena:rshared
       # === OpenAI Codex ===
       - ./.codex:/home/app/.codex:rshared
-      # === Serena MCP ===
-      - ./.serena:/home/app/.serena:rshared
+      # === 飞书CLI ===
+      - ./.lark-cli:/home/app/.lark-cli:rshared
+      - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared
 
       # 其他
       # === WRAP代理 ===
       - warp-data:/etc/wireguard
-      # === 飞书CLI ===
-      - ./.lark-cli:/home/app/.lark-cli:rshared
-      - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared
+      
     healthcheck:
       test: ["CMD", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
