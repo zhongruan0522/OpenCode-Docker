@@ -45,6 +45,9 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     volumes:
