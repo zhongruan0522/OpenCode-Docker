@@ -18,6 +18,11 @@
 
 ## 文件布局架构
 
-1. `packages`文件夹内用于存放各种依赖库组件，需要修改内部项目的时候请优先阅读里面的`AGENTS.md`指导文档
-2. `config`文件夹用于存放配置文件，例如supervisord的config文件
-3. `docker`文件夹用于存放docker镜像的启动文件
+项目按职责划分为四个顶层模块：
+
+| 目录 | 职责 | 说明 |
+|---|---|---|
+| `base/` | 基础依赖 | 存放底层工具和依赖库组件（如 microwarp 代理）。修改内部项目时请优先阅读对应目录下的 `AGENTS.md` |
+| `backend/` | 控制台后端 | OpenCode serve 相关的后端服务逻辑 |
+| `frontend/` | 控制台前端 | code-server 相关的前端服务逻辑 |
+| `docker/` | Docker 启动 | 镜像启动文件（entrypoint.sh、healthcheck.sh）和进程管理配置（supervisord.conf） |

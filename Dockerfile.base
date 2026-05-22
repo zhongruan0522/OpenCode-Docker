@@ -275,8 +275,8 @@ RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
-COPY config/supervisord.conf /etc/supervisor/supervisord.conf
-COPY packages/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
+COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
+COPY base/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh
 
 WORKDIR /workspace
