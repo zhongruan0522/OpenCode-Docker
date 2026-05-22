@@ -1,3 +1,4 @@
 # Core dump files
 core.[0-9]*
 *.core
+.serena/
