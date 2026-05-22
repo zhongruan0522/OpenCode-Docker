@@ -1,3 +1,15 @@
 .git
 .gitignore
 workspace
+.serena
+参考项目
+backend/manager-service/target
+.env
+.env.*
+!.env.example
+app-config
+.codex
+.config
+.lark-cli
+.local
+*.log

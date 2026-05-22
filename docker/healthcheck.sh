@@ -8,6 +8,7 @@ STATUS=$(supervisorctl -c /etc/supervisor/supervisord.conf status)
 # 检查 opencode 和 code-server 是否都处于 RUNNING 状态
 echo "$STATUS" | grep -qE '^opencode\s+RUNNING' || { echo "opencode not RUNNING"; exit 1; }
 echo "$STATUS" | grep -qE '^code-server\s+RUNNING' || { echo "code-server not RUNNING"; exit 1; }
+echo "$STATUS" | grep -qE '^manager\s+RUNNING' || { echo "manager not RUNNING"; exit 1; }
 
 echo "All services healthy"
 exit 0

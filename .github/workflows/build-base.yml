@@ -6,7 +6,17 @@ on:
       - main
     paths:
       - 'Dockerfile.base'
+      - 'backend/**'
       - 'docker/**'
+      - 'frontend/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile.base'
+      - 'backend/**'
+      - 'docker/**'
+      - 'frontend/**'
   schedule:
     # 每周一北京时间 04:00 (UTC 周日 20:00)
     - cron: '0 20 * * 0'
@@ -33,6 +43,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -51,18 +62,39 @@ jobs:
           context: .
           file: Dockerfile.base
           platforms: linux/amd64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.image }}:base
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   trigger-dynamic:
+    if: github.event_name != 'pull_request'
     needs: build-base
     runs-on: ubuntu-latest
     permissions:
       actions: write
+      contents: read
 
     steps:
+      - name: Resolve pinned dynamic versions
+        id: versions
+        run: |
+          BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
+          OPENCODE_VERSION=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
+          CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
+          CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
+          SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
+
+          if [ -z "$OPENCODE_VERSION" ] || [ -z "$CODE_SERVER_VERSION" ] || [ -z "$CODEX_VERSION" ] || [ -z "$SERENA_VERSION" ]; then
+            echo "Failed to resolve pinned dynamic versions from latest release body" >&2
+            exit 1
+          fi
+
+          echo "opencode_version=$OPENCODE_VERSION" >> $GITHUB_OUTPUT
+          echo "code_server_version=$CODE_SERVER_VERSION" >> $GITHUB_OUTPUT
+          echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
+          echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
+
       - name: Trigger dynamic layer build
         uses: actions/github-script@v8
         with:
@@ -71,5 +103,11 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'docker-build.yml',
-              ref: 'main'
+              ref: 'main',
+              inputs: {
+                opencode_version: '${{ steps.versions.outputs.opencode_version }}',
+                code_server_version: '${{ steps.versions.outputs.code_server_version }}',
+                codex_version: '${{ steps.versions.outputs.codex_version }}',
+                serena_version: '${{ steps.versions.outputs.serena_version }}'
+              }
             });

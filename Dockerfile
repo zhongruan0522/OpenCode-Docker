@@ -24,16 +24,14 @@ RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
     && rm -rf /var/lib/apt/lists/*
 
 # npm 全局包（自动更新检测的组件）
-RUN --mount=type=cache,target=/root/.npm \
-    npm install -g opencode-ai@${OPENCODE_VERSION} \
+RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && npm install -g @openai/codex@${CODEX_VERSION} \
     && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline-musl \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl
 
 # serena-agent（自动更新检测，通过 uv tool 安装）
-RUN --mount=type=cache,target=/root/.cache/uv \
-    if ! command -v uv >/dev/null 2>&1; then \
+RUN if ! command -v uv >/dev/null 2>&1; then \
       curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/tmp/uv-cargo UV_INSTALL_DIR=/usr/local/bin sh \
       && rm -rf /tmp/uv-cargo; \
     fi \

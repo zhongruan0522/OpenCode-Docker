@@ -11,8 +11,6 @@ on:
       - main
     paths:
       - 'Dockerfile'
-      - 'Dockerfile.base'
-      - 'docker/**'
   workflow_dispatch:
     inputs:
       opencode_version:

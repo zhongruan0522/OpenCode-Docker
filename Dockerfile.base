@@ -7,7 +7,18 @@
 # ==========================================
 
 # ---
-# 阶段 1：编译 MicroSOCKS 引擎
+# 阶段 1：编译 4098 管理服务（Rust/Axum）
+# ---
+FROM rust:1.85-bookworm AS manager-builder
+
+WORKDIR /src
+COPY backend/manager-service ./backend/manager-service
+COPY frontend/manager ./frontend/manager
+RUN cargo build --manifest-path backend/manager-service/Cargo.toml --release \
+    && cp backend/manager-service/target/release/opencode-manager /tmp/opencode-manager
+
+# ---
+# 阶段 1.5：编译 MicroSOCKS 引擎
 # ---
 FROM alpine:latest AS microsocks-builder
 
@@ -104,6 +115,9 @@ RUN curl -fsSL "https://services.gradle.org/distributions/gradle-7.5-bin.zip" -o
 # microsocks
 COPY --from=microsocks-builder /src/microsocks /usr/local/bin/microsocks
 
+# 4098 管理服务
+COPY --from=manager-builder /tmp/opencode-manager /usr/local/bin/opencode-manager
+
 # gh CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -113,8 +127,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && rm -rf /var/lib/apt/lists/*
 
 # Playwright MCP（仅安装 npm 包，浏览器在下面单独装）
-RUN --mount=type=cache,target=/root/.npm \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
     && npm install -g @larksuite/cli \
     && npm install -g wrangler@${WRANGLER_VERSION}
 
@@ -123,8 +136,7 @@ RUN curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTA
     && rm -rf /opt/uv
 
 # Python 包
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install --no-cache-dir --break-system-packages \
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
         Pillow \
         "scrapling[all]>=0.4.2"
 
@@ -236,7 +248,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
        > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends docker-ce docker-ce-cli docker-compose-plugin iptables \
+    && apt-get install -y --no-install-recommends docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin iptables \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建架构无关的 JAVA_HOME 符号链接
@@ -277,7 +289,7 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY base/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /usr/local/bin/opencode-manager
 
 WORKDIR /workspace
 

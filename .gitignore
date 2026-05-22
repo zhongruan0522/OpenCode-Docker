@@ -1,5 +1,25 @@
 # Core dump files
 core.[0-9]*
 *.core
+
+# Local agent/project caches
 .serena/
 参考项目/
+
+# Runtime bind mounts and local secrets
+.env
+.env.*
+!.env.example
+workspace/
+app-config/
+.codex/
+.config/
+.lark-cli/
+.local/
+
+# Logs
+*.log
+
+# Build outputs
+target/
+backend/manager-service/target/
