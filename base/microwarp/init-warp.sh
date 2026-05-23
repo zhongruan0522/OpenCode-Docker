@@ -141,6 +141,18 @@ if [ -n "$PRE_DEFAULT_GW_IP" ] && [ -n "$PRE_DEFAULT_DEV" ]; then
             warp_log "已添加绕过路由: $cidr via $PRE_DEFAULT_GW_IP dev $PRE_DEFAULT_DEV"
         fi
     done
+
+    # Docker 发布端口的公网入站连接会 DNAT 到容器主网卡地址。
+    # 响应包源地址固定为该主网卡地址，必须回到宿主网关，不能被 WARP 默认策略路由接走。
+    PRE_DEFAULT_SRC=$(ip -o -4 addr show dev "$PRE_DEFAULT_DEV" scope global \
+        | awk 'NR == 1 { split($4, addr, "/"); print addr[1] }')
+    if [ -n "$PRE_DEFAULT_SRC" ]; then
+        if ! ip rule show | grep -q "from ${PRE_DEFAULT_SRC} lookup main"; then
+            if ip rule add pref 100 from "$PRE_DEFAULT_SRC/32" lookup main > /dev/null 2>&1; then
+                warp_log "已添加入站服务回程策略: from $PRE_DEFAULT_SRC lookup main"
+            fi
+        fi
+    fi
 else
     warp_log "未检测到启动前默认网关，跳过私网绕过路由恢复"
 fi

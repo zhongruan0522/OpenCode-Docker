@@ -1,6 +1,6 @@
 services:
   opencode:
-    image: ghcr.io/zhongruan0522/opencode-docker:${OPENCODE_SERVER_VERSION:1.14.19}
+    image: ghcr.io/zhongruan0522/opencode-docker:${OPENCODE_SERVER_VERSION:-1.14.19}
     container_name: opencode
     ports:
       # Codex登录端口
@@ -10,14 +10,14 @@ services:
       # Code-Serve端口
       - "127.0.0.1:4097:8080"
       # 管理控制台端口
-      - "127.0.0.1:4098:4098"
+      - "0.0.0.0:4098:4098"
       # Zread 端口
       - "0.0.0.0:9681:9681"
     environment:
       # OpenCode
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
-      - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:true}
+      - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:-true}
       # Code-Server
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-}
       # GitHub
