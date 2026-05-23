@@ -14,22 +14,22 @@ on:
   workflow_dispatch:
     inputs:
       opencode_version:
-        description: 'OpenCode version (e.g. v1.3.15). Leave empty for latest.'
+        description: 'OpenCode version (e.g. 1.3.15 or v1.3.15). Leave empty to reuse saved release version.'
         required: false
         default: ''
         type: string
       code_server_version:
-        description: 'code-server version (e.g. 4.115.0). Leave empty for latest.'
+        description: 'code-server version (e.g. 4.115.0 or v4.115.0). Leave empty to reuse saved release version.'
         required: false
         default: ''
         type: string
       codex_version:
-        description: 'Codex CLI version (e.g. 0.122.0). Leave empty for latest.'
+        description: 'Codex CLI version (e.g. 0.122.0, v0.122.0, or rust-v0.122.0). Leave empty to reuse saved release version.'
         required: false
         default: ''
         type: string
       serena_version:
-        description: 'serena-agent version (e.g. 0.1.0). Leave empty for latest.'
+        description: 'serena-agent version (e.g. 0.1.0). Leave empty to reuse saved release version.'
         required: false
         default: ''
         type: string
@@ -53,44 +53,74 @@ jobs:
 
       - name: Resolve versions
         id: version
+        env:
+          INPUT_OPENCODE_VERSION: ${{ inputs.opencode_version }}
+          INPUT_CODE_SERVER_VERSION: ${{ inputs.code_server_version }}
+          INPUT_CODEX_VERSION: ${{ inputs.codex_version }}
+          INPUT_SERENA_VERSION: ${{ inputs.serena_version }}
         run: |
+          if [ -z "$INPUT_OPENCODE_VERSION" ] || [ -z "$INPUT_CODE_SERVER_VERSION" ] || [ -z "$INPUT_CODEX_VERSION" ] || [ -z "$INPUT_SERENA_VERSION" ]; then
+            BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
+            SAVED_OPENCODE_VERSION=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
+            SAVED_CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
+            SAVED_CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
+            SAVED_SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
+          fi
+
           # --- OpenCode 版本 ---
-          if [ -n "${{ inputs.opencode_version }}" ]; then
-            OC_VERSION="${{ inputs.opencode_version }}"
+          if [ -n "$INPUT_OPENCODE_VERSION" ]; then
+            OC_VERSION="$INPUT_OPENCODE_VERSION"
             OC_VERSION="${OC_VERSION#v}"
             OC_TAG="v${OC_VERSION}"
           else
-            OC_TAG=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
+            if [ -z "$SAVED_OPENCODE_VERSION" ]; then
+              echo "OpenCode version was not provided and no saved release version was found" >&2
+              exit 1
+            fi
+            OC_TAG="$SAVED_OPENCODE_VERSION"
             OC_VERSION="${OC_TAG#v}"
           fi
           echo "OpenCode: $OC_TAG"
 
           # --- code-server 版本 ---
-          if [ -n "${{ inputs.code_server_version }}" ]; then
-            CS_VERSION="${{ inputs.code_server_version }}"
+          if [ -n "$INPUT_CODE_SERVER_VERSION" ]; then
+            CS_VERSION="$INPUT_CODE_SERVER_VERSION"
             CS_VERSION="${CS_VERSION#v}"
           else
-            CS_VERSION=$(curl -s https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name')
+            if [ -z "$SAVED_CODE_SERVER_VERSION" ]; then
+              echo "code-server version was not provided and no saved release version was found" >&2
+              exit 1
+            fi
+            CS_VERSION="$SAVED_CODE_SERVER_VERSION"
             CS_VERSION="${CS_VERSION#v}"
           fi
           echo "code-server: $CS_VERSION"
 
           # --- Codex 版本 ---
-          if [ -n "${{ inputs.codex_version }}" ]; then
-            CODEX_VERSION="${{ inputs.codex_version }}"
+          if [ -n "$INPUT_CODEX_VERSION" ]; then
+            CODEX_VERSION="$INPUT_CODEX_VERSION"
             CODEX_VERSION="${CODEX_VERSION#rust-v}"
             CODEX_VERSION="${CODEX_VERSION#v}"
           else
-            CODEX_TAG=$(curl -s https://api.github.com/repos/openai/codex/releases/latest | jq -r '.tag_name')
-            CODEX_VERSION="${CODEX_TAG#rust-v}"
+            if [ -z "$SAVED_CODEX_VERSION" ]; then
+              echo "Codex version was not provided and no saved release version was found" >&2
+              exit 1
+            fi
+            CODEX_VERSION="$SAVED_CODEX_VERSION"
+            CODEX_VERSION="${CODEX_VERSION#rust-v}"
+            CODEX_VERSION="${CODEX_VERSION#v}"
           fi
           echo "Codex: $CODEX_VERSION"
 
           # --- serena-agent 版本 ---
-          if [ -n "${{ inputs.serena_version }}" ]; then
-            SERENA_VERSION="${{ inputs.serena_version }}"
+          if [ -n "$INPUT_SERENA_VERSION" ]; then
+            SERENA_VERSION="$INPUT_SERENA_VERSION"
           else
-            SERENA_VERSION=$(curl -s https://pypi.org/pypi/serena-agent/json | jq -r '.info.version')
+            if [ -z "$SAVED_SERENA_VERSION" ]; then
+              echo "serena-agent version was not provided and no saved release version was found" >&2
+              exit 1
+            fi
+            SERENA_VERSION="$SAVED_SERENA_VERSION"
           fi
           echo "serena-agent: $SERENA_VERSION"
 
