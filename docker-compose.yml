@@ -11,34 +11,45 @@ services:
       - "127.0.0.1:4097:8080"
       # 管理控制台端口
       - "0.0.0.0:4098:4098"
+      # Paseo daemon端口：仅绑定宿主 127.0.0.1，给宿主 nginx 反代域名使用
+      - "127.0.0.1:${PASEO_HOST_PORT:-6767}:6767"
       # Zread 端口
       - "0.0.0.0:9681:9681"
     environment:
       # OpenCode
-      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
-      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
-      - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:-true}
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME} # OpenCode 服务登录用户名，entrypoint 会校验必填
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD} # OpenCode 服务登录密码，manager 控制台也复用这组账号
+      - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:-true} # 是否启用 OpenCode 的 Exa 搜索能力
       # Code-Server
-      - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-}
+      - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-} # code-server 明文登录密码，entrypoint 会注入给 code-server
+      # Paseo
+      - PASEO_HOME=/home/app/.paseo # Paseo 配置、日志、项目和 agent 数据目录，已映射到宿主 ./.paseo
+      - PASEO_LISTEN=${PASEO_LISTEN:-0.0.0.0:6767} # Paseo 容器内监听地址；compose 只把 6767 绑定到宿主 127.0.0.1
+      # 生产环境建议改为具体域名，例如 paseo.example.com 或 .example.com；true 便于首次反代联调
+      - PASEO_HOSTNAMES=${PASEO_HOSTNAMES:-true} # Paseo Host 白名单；外部 nginx 反代域名时需允许该域名，否则会 403
+      # 同域名反代通常不需要 CORS；若用 app.paseo.sh 或其他前端直连，请填 https://paseo.example.com
+      - PASEO_CORS_ORIGINS=${PASEO_CORS_ORIGINS:-} # Paseo 跨域来源白名单；同域名 nginx 反代一般留空
+      - PASEO_PASSWORD=${PASEO_PASSWORD:-} # Paseo daemon 访问密码；留空表示不启用 Paseo 自身密码校验
+      - PASEO_DISABLE_RELAY=${PASEO_DISABLE_RELAY:-1} # 是否禁用 Paseo 官方 relay；本地域名反代默认禁用
       # GitHub
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_TOKEN=${GITHUB_TOKEN} # GitHub CLI 登录 token，用于容器内 gh auth 和 git 操作
       # Playwright
-      - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
-      - PLAYWRIGHT_MCP_HEADLESS=1
-      - PLAYWRIGHT_MCP_BROWSER=chromium
-      - PLAYWRIGHT_MCP_NO_SANDBOX=1
+      - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright # Playwright 浏览器缓存目录，使用 base 镜像预装的 Chromium
+      - PLAYWRIGHT_MCP_HEADLESS=1 # Playwright MCP 默认无头模式运行
+      - PLAYWRIGHT_MCP_BROWSER=chromium # Playwright MCP 默认浏览器类型
+      - PLAYWRIGHT_MCP_NO_SANDBOX=1 # 容器内 Chromium 禁用 sandbox，避免权限问题
       # UID/GID
-      - LOCAL_UID=${LOCAL_UID:-10001}
-      - LOCAL_GID=${LOCAL_GID:-10001}
+      - LOCAL_UID=${LOCAL_UID:-10001} # 启动时把 app 用户调整为宿主期望 UID，减少挂载文件权限问题
+      - LOCAL_GID=${LOCAL_GID:-10001} # 启动时把 app 用户调整为宿主期望 GID
       # MicroWARP
-      - ENABLE_WARP=${ENABLE_WARP:-1}
-      - WARP_SOCKS_PORT=${WARP_SOCKS_PORT:-1080}
-      - SOCKS_USER=${SOCKS_USER:-}
-      - SOCKS_PASS=${SOCKS_PASS:-}
-      - ENDPOINT_IP=${ENDPOINT_IP:-}
-      - GH_PROXY=${GH_PROXY:-}
-      - TAILSCALE_CIDR=${TAILSCALE_CIDR:-}
-      - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-}
+      - ENABLE_WARP=${ENABLE_WARP:-1} # 是否启用 MicroWARP 初始化；关闭后不会注入 SOCKS5_PROXY
+      - WARP_SOCKS_PORT=${WARP_SOCKS_PORT:-1080} # MicroWARP SOCKS 端口；Paseo 使用 6767，避免与此端口冲突
+      - SOCKS_USER=${SOCKS_USER:-} # MicroWARP SOCKS 认证用户名，留空则不启用用户名
+      - SOCKS_PASS=${SOCKS_PASS:-} # MicroWARP SOCKS 认证密码，留空则不启用密码
+      - ENDPOINT_IP=${ENDPOINT_IP:-} # 指定 WARP endpoint IP，留空由 init-warp 自动选择
+      - GH_PROXY=${GH_PROXY:-} # GitHub 访问代理覆盖值，供 init-warp 或相关脚本使用
+      - TAILSCALE_CIDR=${TAILSCALE_CIDR:-} # 需要绕过 WARP 的 Tailscale 网段
+      - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-} # 额外绕过 WARP 的 CIDR 列表
     ulimits:
       core:
         soft: 0
@@ -77,6 +88,8 @@ services:
       - ./.serena:/home/app/.serena:rshared
       # === OpenAI Codex ===
       - ./.codex:/home/app/.codex:rshared
+      # === Paseo ===
+      - ./.paseo:/home/app/.paseo:rshared
       # === 飞书CLI ===
       - ./.lark-cli:/home/app/.lark-cli:rshared
       - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared

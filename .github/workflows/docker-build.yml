@@ -6,11 +6,13 @@ on:
       - main
     paths:
       - 'Dockerfile'
+      - 'docker/**'
   pull_request:
     branches:
       - main
     paths:
       - 'Dockerfile'
+      - 'docker/**'
   workflow_dispatch:
     inputs:
       opencode_version:
@@ -30,6 +32,11 @@ on:
         type: string
       serena_version:
         description: 'serena-agent version (e.g. 0.1.0). Leave empty to reuse saved release version.'
+        required: false
+        default: ''
+        type: string
+      paseo_version:
+        description: 'Paseo CLI version (e.g. 0.1.80). Leave empty to reuse saved release version.'
         required: false
         default: ''
         type: string
@@ -58,13 +65,15 @@ jobs:
           INPUT_CODE_SERVER_VERSION: ${{ inputs.code_server_version }}
           INPUT_CODEX_VERSION: ${{ inputs.codex_version }}
           INPUT_SERENA_VERSION: ${{ inputs.serena_version }}
+          INPUT_PASEO_VERSION: ${{ inputs.paseo_version }}
         run: |
-          if [ -z "$INPUT_OPENCODE_VERSION" ] || [ -z "$INPUT_CODE_SERVER_VERSION" ] || [ -z "$INPUT_CODEX_VERSION" ] || [ -z "$INPUT_SERENA_VERSION" ]; then
+          if [ -z "$INPUT_OPENCODE_VERSION" ] || [ -z "$INPUT_CODE_SERVER_VERSION" ] || [ -z "$INPUT_CODEX_VERSION" ] || [ -z "$INPUT_SERENA_VERSION" ] || [ -z "$INPUT_PASEO_VERSION" ]; then
             BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
             SAVED_OPENCODE_VERSION=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
             SAVED_CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
             SAVED_CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
             SAVED_SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
+            SAVED_PASEO_VERSION=$(echo "$BODY" | grep -oP 'paseo-version=\K[^\s]+' || true)
           fi
 
           # --- OpenCode 版本 ---
@@ -124,11 +133,25 @@ jobs:
           fi
           echo "serena-agent: $SERENA_VERSION"
 
+          # --- Paseo 版本 ---
+          if [ -n "$INPUT_PASEO_VERSION" ]; then
+            PASEO_VERSION="$INPUT_PASEO_VERSION"
+            PASEO_VERSION="${PASEO_VERSION#v}"
+          else
+            if [ -z "$SAVED_PASEO_VERSION" ]; then
+              SAVED_PASEO_VERSION=$(curl -fsSL https://registry.npmjs.org/@getpaseo%2fcli/latest | jq -r '.version')
+            fi
+            PASEO_VERSION="$SAVED_PASEO_VERSION"
+            PASEO_VERSION="${PASEO_VERSION#v}"
+          fi
+          echo "Paseo: $PASEO_VERSION"
+
           echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
           echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
           echo "cs_version=$CS_VERSION" >> $GITHUB_OUTPUT
           echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
           echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
+          echo "paseo_version=$PASEO_VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: check_release
@@ -156,6 +179,7 @@ jobs:
             <!-- code-server-version=${{ steps.version.outputs.cs_version }} -->
             <!-- codex-version=${{ steps.version.outputs.codex_version }} -->
             <!-- serena-version=${{ steps.version.outputs.serena_version }} -->
+            <!-- paseo-version=${{ steps.version.outputs.paseo_version }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -186,6 +210,7 @@ jobs:
             CODE_SERVER_VERSION=${{ steps.version.outputs.cs_version }}
             CODEX_VERSION=${{ steps.version.outputs.codex_version }}
             SERENA_VERSION=${{ steps.version.outputs.serena_version }}
+            PASEO_VERSION=${{ steps.version.outputs.paseo_version }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

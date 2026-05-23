@@ -7,7 +7,6 @@ on:
     paths:
       - 'Dockerfile.base'
       - 'backend/**'
-      - 'docker/**'
       - 'frontend/**'
   pull_request:
     branches:
@@ -15,7 +14,6 @@ on:
     paths:
       - 'Dockerfile.base'
       - 'backend/**'
-      - 'docker/**'
       - 'frontend/**'
   schedule:
     # 每周一北京时间 04:00 (UTC 周日 20:00)
@@ -84,8 +82,12 @@ jobs:
           CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
           CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
           SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
+          PASEO_VERSION=$(echo "$BODY" | grep -oP 'paseo-version=\K[^\s]+' || true)
+          if [ -z "$PASEO_VERSION" ]; then
+            PASEO_VERSION=$(curl -fsSL https://registry.npmjs.org/@getpaseo%2fcli/latest | jq -r '.version')
+          fi
 
-          if [ -z "$OPENCODE_VERSION" ] || [ -z "$CODE_SERVER_VERSION" ] || [ -z "$CODEX_VERSION" ] || [ -z "$SERENA_VERSION" ]; then
+          if [ -z "$OPENCODE_VERSION" ] || [ -z "$CODE_SERVER_VERSION" ] || [ -z "$CODEX_VERSION" ] || [ -z "$SERENA_VERSION" ] || [ -z "$PASEO_VERSION" ]; then
             echo "Failed to resolve pinned dynamic versions from latest release body" >&2
             exit 1
           fi
@@ -94,6 +96,7 @@ jobs:
           echo "code_server_version=$CODE_SERVER_VERSION" >> $GITHUB_OUTPUT
           echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
           echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
+          echo "paseo_version=$PASEO_VERSION" >> $GITHUB_OUTPUT
 
       - name: Trigger dynamic layer build
         uses: actions/github-script@v8
@@ -108,6 +111,7 @@ jobs:
                 opencode_version: '${{ steps.versions.outputs.opencode_version }}',
                 code_server_version: '${{ steps.versions.outputs.code_server_version }}',
                 codex_version: '${{ steps.versions.outputs.codex_version }}',
-                serena_version: '${{ steps.versions.outputs.serena_version }}'
+                serena_version: '${{ steps.versions.outputs.serena_version }}',
+                paseo_version: '${{ steps.versions.outputs.paseo_version }}'
               }
             });
