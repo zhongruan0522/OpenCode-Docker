@@ -153,7 +153,37 @@ RUN mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
          echo "Playwright CLI not found in ${PLAYWRIGHT_ROOT}" >&2; \
          exit 1; \
        fi \
-    && PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "${PLAYWRIGHT_CLI}" install --with-deps chromium \
+    && PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "${PLAYWRIGHT_CLI}" install-deps chromium \
+    && PLAYWRIGHT_INSTALL_PLAN="$(PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" node "${PLAYWRIGHT_CLI}" install --dry-run chromium)" \
+    && printf '%s\n' "${PLAYWRIGHT_INSTALL_PLAN}" \
+    && extract_plan_field() { \
+         artifact="$1"; \
+         field="$2"; \
+         printf '%s\n' "${PLAYWRIGHT_INSTALL_PLAN}" | awk -v artifact="${artifact}" -v field="${field}" '\
+           $0 ~ "^" artifact " " { in_block=1; next } \
+           /^[^[:space:]]/ && in_block { in_block=0 } \
+           in_block && index($0, field ":") { print $3; exit }'; \
+       } \
+    && install_archive() { \
+         name="$1"; \
+         install_dir="$2"; \
+         download_url="$3"; \
+         if [ -z "${install_dir}" ] || [ -z "${download_url}" ]; then \
+           echo "Missing Playwright install data for ${name}" >&2; \
+           exit 1; \
+         fi; \
+         tmp_zip="/tmp/playwright-${name}.zip"; \
+         rm -rf "${install_dir}" "${tmp_zip}"; \
+         mkdir -p "${install_dir}"; \
+         echo "Downloading ${name} from ${download_url}"; \
+         curl -fL --retry 5 --retry-all-errors --connect-timeout 30 --max-time 900 "${download_url}" -o "${tmp_zip}"; \
+         unzip -q "${tmp_zip}" -d "${install_dir}"; \
+         rm -f "${tmp_zip}"; \
+         touch "${install_dir}/INSTALLATION_COMPLETE" "${install_dir}/DEPENDENCIES_VALIDATED"; \
+       } \
+    && install_archive chromium "$(extract_plan_field 'Chrome for Testing' 'Install location')" "$(extract_plan_field 'Chrome for Testing' 'Download url')" \
+    && install_archive ffmpeg "$(extract_plan_field 'FFmpeg' 'Install location')" "$(extract_plan_field 'FFmpeg' 'Download url')" \
+    && install_archive chromium-headless-shell "$(extract_plan_field 'Chrome Headless Shell' 'Install location')" "$(extract_plan_field 'Chrome Headless Shell' 'Download url')" \
     && PYTHON_PW_REVISION=$(python3 -m playwright install --dry-run chromium 2>&1 | grep -oP 'chromium v\K[0-9]+') \
     && NODE_REVISION=$(ls -d "${PLAYWRIGHT_BROWSERS_PATH}/chromium-"* | grep -oP 'chromium-\K[0-9]+' | sort -rn | head -1) \
     && if [ "${PYTHON_PW_REVISION}" != "${NODE_REVISION}" ]; then \
@@ -165,7 +195,7 @@ RUN mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
        else \
          echo "Revisions match (${NODE_REVISION}), no symlink needed"; \
        fi \
-    && scrapling install --force
+    && PLAYWRIGHT_SKIP_BROWSER_GC=1 scrapling install --force
 
 # ---
 # 阶段 3：最终基础镜像（无编译工具链，从 builder 拷成品）
