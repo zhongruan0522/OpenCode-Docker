@@ -34,6 +34,7 @@ FROM node:24-bookworm-slim AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PLAYWRIGHT_MCP_VERSION=0.0.70
 ARG WRANGLER_VERSION=latest
+ARG EAS_CLI_VERSION=latest
 
 ENV GOLANG_VERSION=1.26.1
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
@@ -129,7 +130,19 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # Playwright MCP（仅安装 npm 包，浏览器在下面单独装）
 RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
     && npm install -g @larksuite/cli \
-    && npm install -g wrangler@${WRANGLER_VERSION}
+    && npm install -g wrangler@${WRANGLER_VERSION} \
+    && npm install -g eas-cli@${EAS_CLI_VERSION}
+
+# Wine（Linux 上交叉编译 Windows NSIS 安装包所需）
+RUN dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        wine \
+        wine64 \
+        wine32 \
+        mono-complete \
+        nsis \
+    && rm -rf /var/lib/apt/lists/*
 
 # uv (Python 包管理器)
 RUN curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTALL_DIR=/usr/local/bin sh \
@@ -206,8 +219,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 USER root
 WORKDIR /app
 
-# 运行时依赖 + Playwright Chromium 系统库
-RUN apt-get update \
+# 运行时依赖 + Playwright Chromium 系统库 + Wine（Windows 交叉编译）
+RUN dpkg --add-architecture i386 \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         locales \
         ca-certificates \
@@ -269,6 +283,12 @@ RUN apt-get update \
         libpango-1.0-0 \
         libcairo2 \
         libdbus-1-3 \
+        # Wine + NSIS（Linux 上交叉编译 Windows 安装包）
+        wine \
+        wine64 \
+        wine32 \
+        mono-complete \
+        nsis \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
