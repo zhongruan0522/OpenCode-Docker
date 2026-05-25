@@ -35,6 +35,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG PLAYWRIGHT_MCP_VERSION=0.0.70
 ARG WRANGLER_VERSION=latest
 ARG EAS_CLI_VERSION=latest
+ARG ELECTRON_VERSION=41.2.0
 
 ENV GOLANG_VERSION=1.26.1
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
@@ -143,6 +144,17 @@ RUN dpkg --add-architecture i386 \
         mono-complete \
         nsis \
     && rm -rf /var/lib/apt/lists/*
+
+# Windows Electron 二进制缓存（Linux 上交叉编译 Windows 桌面包所需）
+# electron-builder 打 Windows 包时需要 win32 平台的 electron.exe，
+# 而 npm install 只会下载当前平台（linux）的二进制。
+ARG ELECTRON_VERSION
+RUN mkdir -p /opt/electron-cache/win32-x64 \
+    && curl -fSL --retry 3 "https://github.com/electron/electron/releases/download/v${ELECTRON_VERSION}/electron-v${ELECTRON_VERSION}-win32-x64.zip" \
+       -o /tmp/electron-win32-x64.zip \
+    && unzip -q /tmp/electron-win32-x64.zip -d /opt/electron-cache/win32-x64 \
+    && rm -f /tmp/electron-win32-x64.zip \
+    && touch /opt/electron-cache/win32-x64/.version-${ELECTRON_VERSION}
 
 # uv (Python 包管理器)
 RUN curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTALL_DIR=/usr/local/bin sh \
@@ -310,6 +322,7 @@ COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt /opt
 COPY --from=builder /usr/bin/gh /usr/bin/gh
 COPY --from=builder /home/app/.cache/ms-playwright /home/app/.cache/ms-playwright
+COPY --from=builder /opt/electron-cache /opt/electron-cache
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     ANDROID_SDK_ROOT=/opt/android-sdk
@@ -322,6 +335,7 @@ ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/gradle-9.0.0/bin:
     PLAYWRIGHT_MCP_BROWSER=chromium \
     PLAYWRIGHT_MCP_NO_SANDBOX=1 \
     WARP_SOCKS_PORT=1080 \
+    ELECTRON_CACHE=/opt/electron-cache \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
     LC_ALL=zh_CN.UTF-8 \
