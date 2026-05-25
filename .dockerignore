@@ -9,7 +9,6 @@ backend/manager-service/target
 !.env.example
 app-config
 .codex
-.paseo
 .config
 .lark-cli
 .local

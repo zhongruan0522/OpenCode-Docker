@@ -74,7 +74,7 @@ if [ "$(id -u)" = '0' ]; then
     fi
 
     # 提前创建并修正 code-server 的配置/数据目录，避免首次启动时权限错乱。
-    mkdir -p /home/app/.config/code-server /home/app/.local/share/code-server /home/app/.paseo
+    mkdir -p /home/app/.config/code-server /home/app/.local/share/code-server
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
     exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf

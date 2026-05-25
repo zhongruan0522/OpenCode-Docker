@@ -13,7 +13,6 @@ ARG OPENCODE_VERSION=latest
 ARG CODE_SERVER_VERSION=4.115.0
 ARG CODEX_VERSION=latest
 ARG SERENA_VERSION=latest
-ARG PASEO_VERSION=latest
 
 # code-server（自动更新检测）
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -27,7 +26,6 @@ RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
 # npm 全局包（自动更新检测的组件）
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && npm install -g @openai/codex@${CODEX_VERSION} \
-    && npm install -g @getpaseo/cli@${PASEO_VERSION} \
     && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline-musl \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl
@@ -40,7 +38,7 @@ RUN if ! command -v uv >/dev/null 2>&1; then \
     && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
     && serena init
 
-# 动态层覆盖启动配置，确保 Paseo 这类动态组件不依赖 base 镜像重建。
+# 动态层覆盖启动配置。
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
