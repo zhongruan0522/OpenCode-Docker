@@ -146,7 +146,7 @@ jobs:
 
       - name: Create or update GitHub Release
         if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.oc_tag }}
           name: OpenCode ${{ steps.version.outputs.oc_tag }}
