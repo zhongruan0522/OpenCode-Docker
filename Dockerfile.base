@@ -7,17 +7,6 @@
 # ==========================================
 
 # ---
-# 阶段 1：编译 4098 管理服务（Rust/Axum）
-# ---
-FROM rust:1.85-bookworm AS manager-builder
-
-WORKDIR /src
-COPY backend/manager-service ./backend/manager-service
-COPY frontend/manager ./frontend/manager
-RUN cargo build --manifest-path backend/manager-service/Cargo.toml --release \
-    && cp backend/manager-service/target/release/opencode-manager /tmp/opencode-manager
-
-# ---
 # 阶段 1.5：编译 MicroSOCKS 引擎
 # ---
 FROM alpine:latest AS microsocks-builder
@@ -116,9 +105,6 @@ RUN curl -fsSL "https://services.gradle.org/distributions/gradle-7.5-bin.zip" -o
 
 # microsocks
 COPY --from=microsocks-builder /src/microsocks /usr/local/bin/microsocks
-
-# 4098 管理服务
-COPY --from=manager-builder /tmp/opencode-manager /usr/local/bin/opencode-manager
 
 # gh CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -353,7 +339,7 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY base/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /usr/local/bin/opencode-manager
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh
 
 WORKDIR /workspace
 

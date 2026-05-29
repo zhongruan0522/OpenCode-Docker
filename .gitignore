@@ -22,4 +22,3 @@ app-config/
 
 # Build outputs
 target/
-backend/manager-service/target/

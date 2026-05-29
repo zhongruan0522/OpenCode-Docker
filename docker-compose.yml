@@ -9,14 +9,12 @@ services:
       - "127.0.0.1:4096:4096"
       # Code-Serve端口
       - "127.0.0.1:4097:8080"
-      # 管理控制台端口
-      - "0.0.0.0:4098:4098"
       # Zread 端口
       - "0.0.0.0:9681:9681"
     environment:
       # OpenCode
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME} # OpenCode 服务登录用户名，entrypoint 会校验必填
-      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD} # OpenCode 服务登录密码，manager 控制台也复用这组账号
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD} # OpenCode 服务登录密码
       - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:-true} # 是否启用 OpenCode 的 Exa 搜索能力
       # Code-Server
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-} # code-server 明文登录密码，entrypoint 会注入给 code-server
