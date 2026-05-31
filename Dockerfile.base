@@ -69,14 +69,24 @@ RUN apt-get update \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
 
-# Go + Bun
+# Go + Bun + pnpm
 RUN curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
     && curl -fsSL https://bun.sh/install | bash \
     && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
-    && rm -rf /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api
+    && rm -rf /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api \
+    && npm install -g pnpm@10
 
 # gopls (Go 语言服务器)
 RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest
+
+# Rust 工具链（codex-rs 工作区需要）
+ENV RUSTUP_HOME=/opt/rustup \
+    CARGO_HOME=/opt/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal \
+    && rustup component add clippy rustfmt \
+    && rm -rf "${RUSTUP_HOME}/toolchains/*/share/doc" \
+              "${RUSTUP_HOME}/toolchains/*/share/man"
 
 # Android SDK
 RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
@@ -119,6 +129,9 @@ RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIG
     && npm install -g @larksuite/cli \
     && npm install -g wrangler@${WRANGLER_VERSION} \
     && npm install -g eas-cli@${EAS_CLI_VERSION}
+
+# 高频全局 npm 工具（出现在 3+ 项目）
+RUN npm install -g typescript eslint prettier esbuild tsx turbo oxlint
 
 # Wine（Linux 上交叉编译 Windows NSIS 安装包所需）
 RUN dpkg --add-architecture i386 \
@@ -251,6 +264,8 @@ RUN dpkg --add-architecture i386 \
         iproute2 \
         kmod \
         gcc \
+        pkg-config \
+        libssl-dev \
         # 常用网络/系统诊断工具
         lsof \
         net-tools \
@@ -311,9 +326,11 @@ COPY --from=builder /home/app/.cache/ms-playwright /home/app/.cache/ms-playwrigh
 COPY --from=builder /opt/electron-cache /opt/electron-cache
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
-    ANDROID_SDK_ROOT=/opt/android-sdk
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    RUSTUP_HOME=/opt/rustup \
+    CARGO_HOME=/opt/cargo
 
-ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PATH}" \
+ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
