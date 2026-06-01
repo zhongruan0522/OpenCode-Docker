@@ -351,8 +351,10 @@ COPY --from=builder /opt/electron-cache /opt/electron-cache
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     ANDROID_SDK_ROOT=/opt/android-sdk \
+    ANDROID_HOME=/opt/android-sdk \
     RUSTUP_HOME=/opt/rustup \
-    CARGO_HOME=/opt/cargo
+    CARGO_HOME=/opt/cargo \
+    GRADLE_HOME=/opt/gradle-9.0.0
 
 ENV PNPM_HOME="/home/app/.local/share/pnpm"
 ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PNPM_HOME}:${PATH}" \
@@ -375,8 +377,10 @@ ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gr
 RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash --uid 10001 app; fi \
     && mkdir -p /workspace /home/app/.config/opencode /home/app/.config/code-server \
                /home/app/.cache /home/app/.local/share/code-server /etc/wireguard \
-               "${PNPM_HOME}" \
-    && chown -R app:app /home/app /workspace "${PLAYWRIGHT_BROWSERS_PATH}"
+               "${PNPM_HOME}" /home/app/go \
+    && chown -R app:app /home/app /workspace "${PLAYWRIGHT_BROWSERS_PATH}" \
+                        /opt/cargo /opt/rustup /opt/bun /opt/android-sdk \
+                        /opt/gradle-9.0.0 /opt/gradle-7.5
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
