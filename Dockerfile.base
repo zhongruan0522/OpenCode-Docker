@@ -342,13 +342,6 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
 RUN JAVA_REAL_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")" \
     && ln -sf "${JAVA_REAL_HOME}" /usr/lib/jvm/java-17-openjdk-current
 
-# 从 builder 复制所有构建产物
-COPY --from=builder /usr/local /usr/local
-COPY --from=builder /opt /opt
-COPY --from=builder /usr/bin/gh /usr/bin/gh
-COPY --from=builder /home/app/.cache/ms-playwright /home/app/.cache/ms-playwright
-COPY --from=builder /opt/electron-cache /opt/electron-cache
-
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     ANDROID_SDK_ROOT=/opt/android-sdk \
     ANDROID_HOME=/opt/android-sdk \
@@ -378,9 +371,13 @@ RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash
     && mkdir -p /workspace /home/app/.config/opencode /home/app/.config/code-server \
                /home/app/.cache /home/app/.local/share/code-server /etc/wireguard \
                "${PNPM_HOME}" /home/app/go \
-    && chown -R app:app /home/app /workspace "${PLAYWRIGHT_BROWSERS_PATH}" \
-                        /opt/cargo /opt/rustup /opt/bun /opt/android-sdk \
-                        /opt/gradle-9.0.0 /opt/gradle-7.5
+    && chown -R app:app /home/app /workspace
+
+# 从 builder 复制所有构建产物，较大的 app 可写目录在 COPY 阶段直接设置 ownership，避免后续递归 chown 生成额外大层。
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder --chown=app:app /opt /opt
+COPY --from=builder /usr/bin/gh /usr/bin/gh
+COPY --from=builder --chown=app:app /home/app/.cache/ms-playwright /home/app/.cache/ms-playwright
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh

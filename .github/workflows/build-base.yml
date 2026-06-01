@@ -34,6 +34,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Free runner disk space
+        run: |
+          df -h
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes
+          df -h
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
