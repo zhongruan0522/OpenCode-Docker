@@ -75,6 +75,7 @@ RUN apt-get update \
 RUN curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - \
     && curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" \
     && ln -sf /opt/bun/bin/bun /usr/local/bin/bun \
+    && ln -sf /opt/bun/bin/bunx /usr/local/bin/bunx \
     && rm -rf /usr/local/go/test /usr/local/go/doc /usr/local/go/misc /usr/local/go/api \
     && npm install -g pnpm@${PNPM_VERSION}
 
