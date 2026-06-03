@@ -20,8 +20,6 @@ services:
       - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:-true} # 是否启用 OpenCode 的 Exa 搜索能力
       # Code-Server
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-} # code-server 明文登录密码，entrypoint 会注入给 code-server
-      # SSH
-      - SSH_PASSWORD=${SSH_PASSWORD:-} # SSH 登录密码（app 用户），设置后启用 SSH Server，端口 2223
       # GitHub
       - GITHUB_TOKEN=${GITHUB_TOKEN} # GitHub CLI 登录 token，用于容器内 gh auth 和 git 操作
       # Playwright
@@ -66,6 +64,8 @@ services:
       # === Code-Server ===
       - ./.local/share/code-server:/home/app/.local/share/code-server:rshared
       - ./.config/code-server:/home/app/.config/code-server:rshared
+      # === SSH ===
+      - ./app-config/authorized_keys:/home/app/.ssh/authorized_keys:ro # SSH 公钥文件，挂载后启用 SSH Server，端口 2223
       
       # CLI
       # === OpenCode 配置 ===

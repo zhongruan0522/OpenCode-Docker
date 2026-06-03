@@ -10,8 +10,8 @@ STATUS=$(supervisorctl -c /etc/supervisor/supervisord.conf status)
 echo "$STATUS" | grep -qE '^opencode\s+RUNNING' || { echo "opencode not RUNNING"; exit 1; }
 echo "$STATUS" | grep -qE '^code-server\s+RUNNING' || { echo "code-server not RUNNING"; exit 1; }
 
-# 检查 sshd（仅在 SSH_PASSWORD 已设置时）
-if [ -n "${SSH_PASSWORD:-}" ]; then
+# 检查 sshd（仅在 authorized_keys 存在时）
+if [ -f /home/app/.ssh/authorized_keys ] && [ -s /home/app/.ssh/authorized_keys ]; then
     pgrep -x sshd >/dev/null || { echo "sshd not running"; exit 1; }
 fi
 

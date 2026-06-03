@@ -78,11 +78,11 @@ if [ "$(id -u)" = '0' ]; then
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
     # ==========================================
-    # SSH Server 初始化（可选，通过 SSH_PASSWORD 设置启用）
-    # 必须在 UID/GID 映射之后（chpasswd 需要正确的用户），
+    # SSH Server 初始化（可选，通过挂载公钥文件启用）
+    # 将宿主机公钥挂载到 /home/app/.ssh/authorized_keys 即可启用。
     # 必须在 gosu 降权之前（sshd 需要 root 权限）。
     # ==========================================
-    if [ -n "${SSH_PASSWORD:-}" ]; then
+    if [ -f /home/app/.ssh/authorized_keys ] && [ -s /home/app/.ssh/authorized_keys ]; then
         echo "==> [SSH] 初始化 SSH Server..."
 
         mkdir -p /run/sshd /etc/ssh/sshd_config.d
@@ -98,7 +98,7 @@ if [ "$(id -u)" = '0' ]; then
 Port 2223
 PermitRootLogin no
 PubkeyAuthentication yes
-PasswordAuthentication yes
+PasswordAuthentication no
 ChallengeResponseAuthentication no
 UsePAM yes
 X11Forwarding no
@@ -106,11 +106,13 @@ PrintMotd no
 AcceptEnv LANG LC_*
 EOF
 
-        echo "app:${SSH_PASSWORD}" | chpasswd
+        chmod 700 /home/app/.ssh
+        chmod 600 /home/app/.ssh/authorized_keys
+        chown -R app:app /home/app/.ssh
         /usr/sbin/sshd
-        echo "==> [SSH] SSH Server 已启动，端口 2223，用户 app"
+        echo "==> [SSH] SSH Server 已启动，端口 2223，用户 app，公钥认证"
     else
-        echo "==> [SSH] SSH Server 未启用 (设置 SSH_PASSWORD 以启用)"
+        echo "==> [SSH] SSH Server 未启用 (挂载公钥到 /home/app/.ssh/authorized_keys 以启用)"
     fi
 
     exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
