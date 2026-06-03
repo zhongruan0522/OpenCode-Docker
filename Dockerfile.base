@@ -354,8 +354,8 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     CARGO_HOME=/opt/cargo \
     GRADLE_HOME=/opt/gradle-9.0.0
 
-ENV PNPM_HOME="/home/app/.local/share/pnpm"
-ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:${PNPM_HOME}:${PATH}" \
+ENV PNPM_HOME="/home/app/.local/share/pnpm" \
+    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
