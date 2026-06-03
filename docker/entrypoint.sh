@@ -61,6 +61,33 @@ if [ -n "$GITHUB_SSH_KEY" ]; then
 fi
 
 # ==========================================
+# 持久化环境变量（供所有 shell 会话使用）
+# ==========================================
+cat > /etc/profile.d/opencode-env.sh <<'ENV_EOF'
+export PNPM_HOME=/home/app/.local/share/pnpm
+export PATH=/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export GOPATH=/home/app/go
+export BUN_INSTALL=/opt/bun
+export RUSTUP_HOME=/opt/rustup
+export CARGO_HOME=/opt/cargo
+export ANDROID_SDK_ROOT=/opt/android-sdk
+export ANDROID_HOME=/opt/android-sdk
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current
+export GRADLE_HOME=/opt/gradle-9.0.0
+export PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
+export PLAYWRIGHT_MCP_HEADLESS=1
+export PLAYWRIGHT_MCP_BROWSER=chromium
+export PLAYWRIGHT_MCP_NO_SANDBOX=1
+export ELECTRON_CACHE=/opt/electron-cache
+export LANG=zh_CN.UTF-8
+export LANGUAGE=zh_CN:zh
+export LC_ALL=zh_CN.UTF-8
+export EDITOR=vim
+export PIP_BREAK_SYSTEM_PACKAGES=1
+ENV_EOF
+chmod +x /etc/profile.d/opencode-env.sh
+
+# ==========================================
 # UID/GID 映射并启动多服务
 # ==========================================
 if [ "$(id -u)" = '0' ]; then
