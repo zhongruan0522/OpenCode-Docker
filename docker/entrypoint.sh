@@ -96,7 +96,7 @@ if [ "$(id -u)" = '0' ]; then
 
         cat > /etc/ssh/sshd_config.d/opencode.conf <<EOF
 Port 2223
-PermitRootLogin no
+PermitRootLogin yes
 PubkeyAuthentication yes
 PasswordAuthentication no
 ChallengeResponseAuthentication no
@@ -106,11 +106,17 @@ PrintMotd no
 AcceptEnv LANG LC_*
 EOF
 
+        # root 的 authorized_keys 与 app 共用同一份公钥
+        mkdir -p /root/.ssh
+        cp /home/app/.ssh/authorized_keys /root/.ssh/authorized_keys
+        chmod 700 /root/.ssh
+        chmod 600 /root/.ssh/authorized_keys
+
         chmod 700 /home/app/.ssh
         chmod 600 /home/app/.ssh/authorized_keys
         chown -R app:app /home/app/.ssh
         /usr/sbin/sshd
-        echo "==> [SSH] SSH Server 已启动，端口 2223，用户 app，公钥认证"
+        echo "==> [SSH] SSH Server 已启动，端口 2223，用户 root/app，公钥认证"
     else
         echo "==> [SSH] SSH Server 未启用 (挂载公钥到 /home/app/.ssh/authorized_keys 以启用)"
     fi
