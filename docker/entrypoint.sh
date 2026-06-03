@@ -77,6 +77,42 @@ if [ "$(id -u)" = '0' ]; then
     mkdir -p /home/app/.config/code-server /home/app/.local/share/code-server
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
+    # ==========================================
+    # SSH Server 初始化（可选，通过 SSH_PASSWORD 设置启用）
+    # 必须在 UID/GID 映射之后（chpasswd 需要正确的用户），
+    # 必须在 gosu 降权之前（sshd 需要 root 权限）。
+    # ==========================================
+    if [ -n "${SSH_PASSWORD:-}" ]; then
+        echo "==> [SSH] 初始化 SSH Server..."
+
+        mkdir -p /run/sshd /etc/ssh/sshd_config.d
+
+        if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
+            ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N '' -q
+        fi
+        if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
+            ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N '' -q
+        fi
+
+        cat > /etc/ssh/sshd_config.d/opencode.conf <<EOF
+Port 2223
+PermitRootLogin no
+PubkeyAuthentication yes
+PasswordAuthentication yes
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding no
+PrintMotd no
+AcceptEnv LANG LC_*
+EOF
+
+        echo "app:${SSH_PASSWORD}" | chpasswd
+        /usr/sbin/sshd
+        echo "==> [SSH] SSH Server 已启动，端口 2223，用户 app"
+    else
+        echo "==> [SSH] SSH Server 未启用 (设置 SSH_PASSWORD 以启用)"
+    fi
+
     exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
 fi
 
