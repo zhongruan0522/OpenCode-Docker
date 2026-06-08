@@ -102,6 +102,16 @@ if [ "$(id -u)" = '0' ]; then
 
     # 提前创建并修正 code-server 的配置/数据目录，避免首次启动时权限错乱。
     mkdir -p /home/app/.config/code-server /home/app/.local/share/code-server
+    # Open Design 数据目录权限（仅在 OD_API_TOKEN 设置时需要）
+    if [ -n "${OD_API_TOKEN:-}" ]; then
+        mkdir -p /opt/open-design/.od
+        chown -R app:app /opt/open-design/.od
+        # 动态启用 open-design 服务
+        sed -i 's/^autostart=false/autostart=true/' /etc/supervisor/supervisord.conf
+        echo "==> [Open Design] 已启用，端口 4098"
+    else
+        echo "==> [Open Design] 未启用 (设置 OD_API_TOKEN 以启用)"
+    fi
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
     # ==========================================
