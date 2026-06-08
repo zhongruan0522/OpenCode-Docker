@@ -65,6 +65,7 @@ RUN apt-get update \
     && mkdir -p /opt/open-design/assets \
     && cp -r /tmp/open-design/assets/frames /opt/open-design/assets/frames \
     && cp -r /tmp/open-design/assets/community-pets /opt/open-design/assets/community-pets \
+    && mkdir -p /opt/open-design/plugins \
     && cp -r /tmp/open-design/plugins/_official /opt/open-design/plugins/_official \
     # 清理构建依赖和源码
     && apt-get purge -y build-essential python3 make g++ \
