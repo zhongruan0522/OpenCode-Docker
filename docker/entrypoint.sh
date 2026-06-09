@@ -102,16 +102,20 @@ if [ "$(id -u)" = '0' ]; then
 
     # 提前创建并修正 code-server 的配置/数据目录，避免首次启动时权限错乱。
     mkdir -p /home/app/.config/code-server /home/app/.local/share/code-server
-    # Open Design 数据目录权限（仅在 OD_API_TOKEN 设置时需要）
-    if [ -n "${OD_API_TOKEN:-}" ]; then
-        mkdir -p /opt/open-design/.od
-        chown -R app:app /opt/open-design/.od
-        # 动态启用 open-design 服务
-        sed -i 's/^autostart=false/autostart=true/' /etc/supervisor/supervisord.conf
-        echo "==> [Open Design] 已启用，端口 4098"
+    # Open Design：自动启用，未设置 OD_API_TOKEN 时生成随机 token
+    mkdir -p /opt/open-design/.od
+    if [ -z "${OD_API_TOKEN:-}" ]; then
+        OD_API_TOKEN=$(openssl rand -hex 32)
+        export OD_API_TOKEN
+        echo "==> [Open Design] 自动生成 API Token: ${OD_API_TOKEN}"
     else
-        echo "==> [Open Design] 未启用 (设置 OD_API_TOKEN 以启用)"
+        echo "==> [Open Design] 使用用户提供的 API Token"
     fi
+    chown -R app:app /opt/open-design/.od
+    # 将 token 注入 supervisord 配置并启用服务
+    sed -i "s|^environment=HOME=\"/home/app\",USER=\"app\",SHELL=\"/bin/bash\",NODE_ENV=\"production\",NODE_OPTIONS=\"--max-old-space-size=192\",OD_BIND_HOST=\"0.0.0.0\",OD_PORT=\"4098\",OD_DATA_DIR=\"/opt/open-design/.od\"$|environment=HOME=\"/home/app\",USER=\"app\",SHELL=\"/bin/bash\",NODE_ENV=\"production\",NODE_OPTIONS=\"--max-old-space-size=192\",OD_BIND_HOST=\"0.0.0.0\",OD_PORT=\"4098\",OD_DATA_DIR=\"/opt/open-design/.od\",OD_API_TOKEN=\"${OD_API_TOKEN}\"|" /etc/supervisor/supervisord.conf
+    sed -i 's/^autostart=false/autostart=true/' /etc/supervisor/supervisord.conf
+    echo "==> [Open Design] 已启用，端口 4098"
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
     # ==========================================
