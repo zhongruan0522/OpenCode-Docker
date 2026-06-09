@@ -112,8 +112,7 @@ if [ "$(id -u)" = '0' ]; then
         echo "==> [Open Design] 使用用户提供的 API Token"
     fi
     chown -R app:app /opt/open-design/.od
-    # 将 token 注入 supervisord 配置并启用服务
-    sed -i "s|^environment=HOME=\"/home/app\",USER=\"app\",SHELL=\"/bin/bash\",NODE_ENV=\"production\",NODE_OPTIONS=\"--max-old-space-size=192\",OD_BIND_HOST=\"0.0.0.0\",OD_PORT=\"4098\",OD_DATA_DIR=\"/opt/open-design/.od\"$|environment=HOME=\"/home/app\",USER=\"app\",SHELL=\"/bin/bash\",NODE_ENV=\"production\",NODE_OPTIONS=\"--max-old-space-size=192\",OD_BIND_HOST=\"0.0.0.0\",OD_PORT=\"4098\",OD_DATA_DIR=\"/opt/open-design/.od\",OD_API_TOKEN=\"${OD_API_TOKEN}\"|" /etc/supervisor/supervisord.conf
+    # 启用 Open Design；OD_API_TOKEN 由 supervisord 从当前环境继承，避免写入配置文件。
     sed -i 's/^autostart=false/autostart=true/' /etc/supervisor/supervisord.conf
     echo "==> [Open Design] 已启用，端口 4098"
     chown -R app:app /home/app /workspace 2>/dev/null || true

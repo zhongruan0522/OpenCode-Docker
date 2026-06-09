@@ -42,8 +42,9 @@ RUN if ! command -v uv >/dev/null 2>&1; then \
 # Open Design（自动更新检测，从源码 clone + build）
 # 构建 daemon 后端 + web 前端，并复制 skills/design-systems 等资源目录。
 # 需要 build-essential（better-sqlite3 native 编译），构建完成后清理。
+# 不要清理 python3：base 层的 supervisord 依赖它，移除会导致容器启动失败。
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential python3 make g++ \
+    && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && git clone --depth 1 --branch "open-design-v${OPEN_DESIGN_VERSION}" \
          https://github.com/nexu-io/open-design.git /tmp/open-design \
@@ -68,7 +69,7 @@ RUN apt-get update \
     && mkdir -p /opt/open-design/plugins \
     && cp -r /tmp/open-design/plugins/_official /opt/open-design/plugins/_official \
     # 清理构建依赖和源码
-    && apt-get purge -y build-essential python3 make g++ \
+    && apt-get purge -y build-essential \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* /tmp/open-design /tmp/od-deploy \
     && mkdir -p /opt/open-design/.od
