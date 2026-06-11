@@ -14,6 +14,7 @@ ARG CODE_SERVER_VERSION=4.115.0
 ARG CODEX_VERSION=latest
 ARG SERENA_VERSION=latest
 ARG OPEN_DESIGN_VERSION=0.9.0
+ARG CLAUDE_CODE_VERSION=latest
 
 # code-server（自动更新检测）
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -27,6 +28,7 @@ RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
 # npm 全局包（自动更新检测的组件）
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && npm install -g @openai/codex@${CODEX_VERSION} \
+    && npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline-musl \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl
