@@ -9,8 +9,6 @@ services:
       - "127.0.0.1:4096:4096"
       # Code-Serve端口
       - "127.0.0.1:4097:8080"
-      # Open Design端口
-      - "127.0.0.1:4098:4098"
       # Zread 端口
       - "0.0.0.0:9681:9681"
       # SSH 端口
@@ -22,8 +20,6 @@ services:
       - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:-true} # 是否启用 OpenCode 的 Exa 搜索能力
       # Code-Server
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-} # code-server 明文登录密码，entrypoint 会注入给 code-server
-      # Open Design
-      - OD_API_TOKEN=${OD_API_TOKEN:-} # Open Design API Token，设置后启用 Open Design 服务（端口 4098）
       # GitHub
       - GITHUB_TOKEN=${GITHUB_TOKEN} # GitHub CLI 登录 token，用于容器内 gh auth 和 git 操作
       # Playwright
@@ -86,8 +82,6 @@ services:
       # === 飞书CLI ===
       - ./.lark-cli:/home/app/.lark-cli:rshared
       - ./.local/share/lark-cli:/home/app/.local/share/lark-cli:rshared
-      # === Open Design 数据 ===
-      - ./.open-design:/opt/open-design/.od:rshared
 
       # 其他
       # === WRAP代理 ===

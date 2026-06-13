@@ -49,14 +49,6 @@ jobs:
           echo "version=${LATEST}" >> $GITHUB_OUTPUT
           echo "serena-agent latest: $LATEST"
 
-      - name: Get Open Design latest release
-        id: opendesign
-        run: |
-          LATEST=$(curl -s https://api.github.com/repos/nexu-io/open-design/releases/latest | jq -r '.tag_name')
-          # Open Design 的 tag 格式为 open-design-v{version}，剥离前缀
-          echo "version=${LATEST#open-design-v}" >> $GITHUB_OUTPUT
-          echo "Open Design latest: $LATEST"
-
       - name: Get Claude Code latest version
         id: claudecode
         run: |
@@ -76,20 +68,17 @@ jobs:
             LOCAL_CODESERVER=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
             LOCAL_CODEX=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
             LOCAL_SERENA=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
-            LOCAL_OPENDESIGN=$(echo "$BODY" | grep -oP 'open-design-version=\K[^\s]+' || true)
             LOCAL_CLAUDECODE=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
           fi
           echo "opencode=${LOCAL_OPENCODE:-none}" >> $GITHUB_OUTPUT
           echo "codeserver=${LOCAL_CODESERVER:-none}" >> $GITHUB_OUTPUT
           echo "codex=${LOCAL_CODEX:-none}" >> $GITHUB_OUTPUT
           echo "serena=${LOCAL_SERENA:-none}" >> $GITHUB_OUTPUT
-          echo "opendesign=${LOCAL_OPENDESIGN:-none}" >> $GITHUB_OUTPUT
           echo "claudecode=${LOCAL_CLAUDECODE:-none}" >> $GITHUB_OUTPUT
           echo "Our OpenCode: ${LOCAL_OPENCODE:-none}"
           echo "Our code-server: ${LOCAL_CODESERVER:-none}"
           echo "Our Codex: ${LOCAL_CODEX:-none}"
           echo "Our serena-agent: ${LOCAL_SERENA:-none}"
-          echo "Our Open Design: ${LOCAL_OPENDESIGN:-none}"
           echo "Our Claude Code: ${LOCAL_CLAUDECODE:-none}"
 
       # ==========================================
@@ -132,14 +121,6 @@ jobs:
             echo "serena-agent up to date: ${{ steps.serena.outputs.version }}"
           fi
 
-          # Open Design 对比
-          if [ "${{ steps.local.outputs.opendesign }}" != "${{ steps.opendesign.outputs.version }}" ]; then
-            HAS_UPDATE="true"
-            echo "Open Design needs update: ${{ steps.local.outputs.opendesign }} -> ${{ steps.opendesign.outputs.version }}"
-          else
-            echo "Open Design up to date: ${{ steps.opendesign.outputs.version }}"
-          fi
-
           # Claude Code 对比
           if [ "${{ steps.local.outputs.claudecode }}" != "${{ steps.claudecode.outputs.version }}" ]; then
             HAS_UPDATE="true"
@@ -165,7 +146,6 @@ jobs:
                 code_server_version: '${{ steps.codeserver.outputs.version }}',
                 codex_version: '${{ steps.codex.outputs.version }}',
                 serena_version: '${{ steps.serena.outputs.version }}',
-                open_design_version: '${{ steps.opendesign.outputs.version }}',
                 claude_code_version: '${{ steps.claudecode.outputs.version }}'
               }
             });

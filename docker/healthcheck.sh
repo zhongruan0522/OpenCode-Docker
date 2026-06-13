@@ -6,10 +6,9 @@ set -e
 
 STATUS=$(supervisorctl -c /etc/supervisor/supervisord.conf status)
 
-# 检查 opencode、code-server、open-design 是否都处于 RUNNING 状态
+# 检查 opencode、code-server 是否都处于 RUNNING 状态
 echo "$STATUS" | grep -qE '^opencode\s+RUNNING' || { echo "opencode not RUNNING"; exit 1; }
 echo "$STATUS" | grep -qE '^code-server\s+RUNNING' || { echo "code-server not RUNNING"; exit 1; }
-echo "$STATUS" | grep -qE '^open-design\s+RUNNING' || { echo "open-design not RUNNING"; exit 1; }
 
 # 检查 sshd（仅在 authorized_keys 存在时）
 if [ -f /home/app/.ssh/authorized_keys ] && [ -s /home/app/.ssh/authorized_keys ]; then
