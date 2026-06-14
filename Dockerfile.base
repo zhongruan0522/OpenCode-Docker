@@ -264,7 +264,9 @@ USER root
 WORKDIR /app
 
 # 运行时依赖 + Playwright Chromium 系统库 + Wine（Windows 交叉编译）
+# 启用 non-free 组件，因为 unrar 仅在 non-free 仓库中提供
 RUN dpkg --add-architecture i386 \
+    && sed -i 's/Components: main/Components: main non-free non-free-firmware/g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         locales \
