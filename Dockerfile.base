@@ -354,6 +354,8 @@ RUN dpkg --add-architecture i386 \
         imagemagick \
         ghostscript \
         libheif-examples \
+        # 文档格式转换工具（Markdown / HTML / docx 等互转）
+        pandoc \
         # Wine + NSIS（Linux 上交叉编译 Windows 安装包）
         wine \
         wine64 \
