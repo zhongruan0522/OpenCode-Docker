@@ -97,9 +97,19 @@ jobs:
           CLAUDE_CODE_VERSION=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
           CYBERSTRIKE_VERSION=$(echo "$BODY" | grep -oP 'cyberstrike-version=\K[^\s]+' || true)
 
-          if [ -z "$OPENCODE_VERSION" ] || [ -z "$CODE_SERVER_VERSION" ] || [ -z "$CODEX_VERSION" ] || [ -z "$SERENA_VERSION" ] || [ -z "$CLAUDE_CODE_VERSION" ] || [ -z "$CYBERSTRIKE_VERSION" ]; then
+          if [ -z "$OPENCODE_VERSION" ] || [ -z "$CODE_SERVER_VERSION" ] || [ -z "$CODEX_VERSION" ] || [ -z "$SERENA_VERSION" ] || [ -z "$CLAUDE_CODE_VERSION" ]; then
             echo "Failed to resolve pinned dynamic versions from latest release body" >&2
             exit 1
+          fi
+
+          # CyberStrikeAI 容错：saved version 缺失时取上游最新
+          if [ -z "$CYBERSTRIKE_VERSION" ]; then
+            echo "CyberStrikeAI saved version not found, falling back to upstream latest release" >&2
+            CYBERSTRIKE_VERSION="$(curl -fsSL https://api.github.com/repos/Ed1s0nZ/CyberStrikeAI/releases/latest | jq -r '.tag_name')"
+            if [ -z "$CYBERSTRIKE_VERSION" ] || [ "$CYBERSTRIKE_VERSION" = "null" ]; then
+              echo "Failed to fetch CyberStrikeAI latest release tag" >&2
+              exit 1
+            fi
           fi
 
           echo "opencode_version=$OPENCODE_VERSION" >> $GITHUB_OUTPUT

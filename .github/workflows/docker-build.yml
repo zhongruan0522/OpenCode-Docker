@@ -167,16 +167,22 @@ jobs:
           echo "Claude Code: $CC_VERSION"
 
           # --- CyberStrikeAI 版本（保留 v 前缀，Dockerfile 内解 tag） ---
+          # saved version 缺失时自动取上游最新 release（首次集成或 release body 标记丢失的容错）
           if [ -n "$INPUT_CYBERSTRIKE_VERSION" ]; then
             CS_VERSION="$INPUT_CYBERSTRIKE_VERSION"
             CS_VERSION="${CS_VERSION#v}"
             CS_TAG="v${CS_VERSION}"
           else
             if [ -z "$SAVED_CYBERSTRIKE_VERSION" ]; then
-              echo "CyberStrikeAI version was not provided and no saved release version was found" >&2
-              exit 1
+              echo "CyberStrikeAI saved version not found, falling back to upstream latest release" >&2
+              CS_TAG="$(curl -fsSL https://api.github.com/repos/Ed1s0nZ/CyberStrikeAI/releases/latest | jq -r '.tag_name')"
+              if [ -z "$CS_TAG" ] || [ "$CS_TAG" = "null" ]; then
+                echo "Failed to fetch CyberStrikeAI latest release tag" >&2
+                exit 1
+              fi
+            else
+              CS_TAG="$SAVED_CYBERSTRIKE_VERSION"
             fi
-            CS_TAG="$SAVED_CYBERSTRIKE_VERSION"
             CS_VERSION="${CS_TAG#v}"
           fi
           echo "CyberStrikeAI: $CS_TAG"
