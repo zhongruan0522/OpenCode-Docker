@@ -53,8 +53,15 @@ jobs:
         id: claudecode
         run: |
           LATEST=$(curl -s https://registry.npmjs.org/@anthropic-ai/claude-code/latest | jq -r '.version')
-          echo "version=${LATEST}" >> $GITHUB_OUTPUT
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "Claude Code latest: $LATEST"
+
+      - name: Get CyberStrikeAI latest version
+        id: cyberstrike
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/Ed1s0nZ/CyberStrikeAI/releases/latest | jq -r '.tag_name')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "CyberStrikeAI latest: $LATEST"
 
       # ==========================================
       # 获取我们上次记录的版本（从 release body 提取）
@@ -69,17 +76,20 @@ jobs:
             LOCAL_CODEX=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
             LOCAL_SERENA=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
             LOCAL_CLAUDECODE=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
+            LOCAL_CYBERSTRIKE=$(echo "$BODY" | grep -oP 'cyberstrike-version=\K[^\s]+' || true)
           fi
           echo "opencode=${LOCAL_OPENCODE:-none}" >> $GITHUB_OUTPUT
           echo "codeserver=${LOCAL_CODESERVER:-none}" >> $GITHUB_OUTPUT
           echo "codex=${LOCAL_CODEX:-none}" >> $GITHUB_OUTPUT
           echo "serena=${LOCAL_SERENA:-none}" >> $GITHUB_OUTPUT
           echo "claudecode=${LOCAL_CLAUDECODE:-none}" >> $GITHUB_OUTPUT
+          echo "cyberstrike=${LOCAL_CYBERSTRIKE:-none}" >> $GITHUB_OUTPUT
           echo "Our OpenCode: ${LOCAL_OPENCODE:-none}"
           echo "Our code-server: ${LOCAL_CODESERVER:-none}"
           echo "Our Codex: ${LOCAL_CODEX:-none}"
           echo "Our serena-agent: ${LOCAL_SERENA:-none}"
           echo "Our Claude Code: ${LOCAL_CLAUDECODE:-none}"
+          echo "Our CyberStrikeAI: ${LOCAL_CYBERSTRIKE:-none}"
 
       # ==========================================
       # 比对版本，任意一个有更新就触发构建
@@ -129,6 +139,14 @@ jobs:
             echo "Claude Code up to date: ${{ steps.claudecode.outputs.version }}"
           fi
 
+          # CyberStrikeAI 对比
+          if [ "${{ steps.local.outputs.cyberstrike }}" != "${{ steps.cyberstrike.outputs.version }}" ]; then
+            HAS_UPDATE="true"
+            echo "CyberStrikeAI needs update: ${{ steps.local.outputs.cyberstrike }} -> ${{ steps.cyberstrike.outputs.version }}"
+          else
+            echo "CyberStrikeAI up to date: ${{ steps.cyberstrike.outputs.version }}"
+          fi
+
           echo "has_update=$HAS_UPDATE" >> $GITHUB_OUTPUT
 
       - name: Trigger build
@@ -146,6 +164,7 @@ jobs:
                 code_server_version: '${{ steps.codeserver.outputs.version }}',
                 codex_version: '${{ steps.codex.outputs.version }}',
                 serena_version: '${{ steps.serena.outputs.version }}',
-                claude_code_version: '${{ steps.claudecode.outputs.version }}'
+                claude_code_version: '${{ steps.claudecode.outputs.version }}',
+                cyberstrike_version: '${{ steps.cyberstrike.outputs.version }}'
               }
             });

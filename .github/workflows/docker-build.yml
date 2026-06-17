@@ -40,6 +40,11 @@ on:
         required: false
         default: ''
         type: string
+      cyberstrike_version:
+        description: 'CyberStrikeAI version (e.g. v1.6.38). Leave empty to reuse saved release version.'
+        required: false
+        default: ''
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -78,14 +83,16 @@ jobs:
           INPUT_CODEX_VERSION: ${{ inputs.codex_version }}
           INPUT_SERENA_VERSION: ${{ inputs.serena_version }}
           INPUT_CLAUDE_CODE_VERSION: ${{ inputs.claude_code_version }}
+          INPUT_CYBERSTRIKE_VERSION: ${{ inputs.cyberstrike_version }}
         run: |
-          if [ -z "$INPUT_OPENCODE_VERSION" ] || [ -z "$INPUT_CODE_SERVER_VERSION" ] || [ -z "$INPUT_CODEX_VERSION" ] || [ -z "$INPUT_SERENA_VERSION" ] || [ -z "$INPUT_CLAUDE_CODE_VERSION" ]; then
+          if [ -z "$INPUT_OPENCODE_VERSION" ] || [ -z "$INPUT_CODE_SERVER_VERSION" ] || [ -z "$INPUT_CODEX_VERSION" ] || [ -z "$INPUT_SERENA_VERSION" ] || [ -z "$INPUT_CLAUDE_CODE_VERSION" ] || [ -z "$INPUT_CYBERSTRIKE_VERSION" ]; then
             BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
             SAVED_OPENCODE_VERSION=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
             SAVED_CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
             SAVED_CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
             SAVED_SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
             SAVED_CLAUDE_CODE_VERSION=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
+            SAVED_CYBERSTRIKE_VERSION=$(echo "$BODY" | grep -oP 'cyberstrike-version=\K[^\s]+' || true)
           fi
 
           # --- OpenCode 版本 ---
@@ -159,12 +166,28 @@ jobs:
           fi
           echo "Claude Code: $CC_VERSION"
 
+          # --- CyberStrikeAI 版本（保留 v 前缀，Dockerfile 内解 tag） ---
+          if [ -n "$INPUT_CYBERSTRIKE_VERSION" ]; then
+            CS_VERSION="$INPUT_CYBERSTRIKE_VERSION"
+            CS_VERSION="${CS_VERSION#v}"
+            CS_TAG="v${CS_VERSION}"
+          else
+            if [ -z "$SAVED_CYBERSTRIKE_VERSION" ]; then
+              echo "CyberStrikeAI version was not provided and no saved release version was found" >&2
+              exit 1
+            fi
+            CS_TAG="$SAVED_CYBERSTRIKE_VERSION"
+            CS_VERSION="${CS_TAG#v}"
+          fi
+          echo "CyberStrikeAI: $CS_TAG"
+
           echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
           echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
           echo "cs_version=$CS_VERSION" >> $GITHUB_OUTPUT
           echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
           echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
           echo "cc_version=$CC_VERSION" >> $GITHUB_OUTPUT
+          echo "cyberstrike_tag=$CS_TAG" >> $GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: check_release
@@ -193,6 +216,7 @@ jobs:
             <!-- codex-version=${{ steps.version.outputs.codex_version }} -->
             <!-- serena-version=${{ steps.version.outputs.serena_version }} -->
             <!-- claude-code-version=${{ steps.version.outputs.cc_version }} -->
+            <!-- cyberstrike-version=${{ steps.version.outputs.cyberstrike_tag }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -224,6 +248,7 @@ jobs:
             CODEX_VERSION=${{ steps.version.outputs.codex_version }}
             SERENA_VERSION=${{ steps.version.outputs.serena_version }}
             CLAUDE_CODE_VERSION=${{ steps.version.outputs.cc_version }}
+            CYBERSTRIKE_VERSION=${{ steps.version.outputs.cyberstrike_tag }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

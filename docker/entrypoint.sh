@@ -105,6 +105,64 @@ if [ "$(id -u)" = '0' ]; then
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
     # ==========================================
+    # CyberStrikeAI 初始化（首次启动从镜像模板同步资源到挂载目录）
+    # /opt/cyberstrike-ai 为镜像内只读模板，/home/app/.cyberstrike 为用户可写挂载点。
+    # 策略：config.yaml 不覆盖（保留用户改动）；tools/skills/agents/roles/knowledge_base/web 增量同步。
+    # ==========================================
+    CS_TEMPLATE="/opt/cyberstrike-ai"
+    CS_DATA="/home/app/.cyberstrike"
+    if [ -d "$CS_TEMPLATE" ] && [ -x "$CS_TEMPLATE/cyberstrike-ai" ]; then
+        # 密码必填校验：禁止 CyberStrikeAI 走自动生成路径（自动生成密码用户不可预期）
+        if [ -z "${CYBERSTRIKE_AI_PASSWORD:-}" ]; then
+            echo "Error: CYBERSTRIKE_AI_PASSWORD is required." >&2
+            echo "Container will exit. Set it in .env or docker-compose.yml." >&2
+            exit 1
+        fi
+
+        mkdir -p "$CS_DATA"
+        # config.yaml 首次初始化（不存在时从模板复制，已存在则保留用户改动）
+        if [ ! -f "$CS_DATA/config.yaml" ]; then
+            echo "==> [CyberStrikeAI] 首次初始化 config.yaml"
+            cp "$CS_TEMPLATE/config.yaml" "$CS_DATA/config.yaml"
+            # 容器化适配：端口 4099（避开 code-server 8080）、关闭自签 TLS（容器内走反代）
+            sed -i 's/^  port: 8080/  port: 4099/' "$CS_DATA/config.yaml"
+            sed -i 's/^  tls_enabled: true/  tls_enabled: false/' "$CS_DATA/config.yaml"
+            sed -i 's/^  tls_auto_self_sign: true/  tls_auto_self_sign: false/' "$CS_DATA/config.yaml"
+        fi
+
+        # 每次启动注入环境变量到 config.yaml（密码必填，LLM 配置可选）
+        # 使用 0,/pattern/s 仅替换首次出现，避免误改 vision/fofa 等同名块
+        # 整行替换避免 YAML 注释干扰；LLM 项留空时跳过，保留 config.yaml 原值
+        sed -i "0,/^  password:.*/s|^  password:.*|  password: \"${CYBERSTRIKE_AI_PASSWORD}\"|" "$CS_DATA/config.yaml"
+        if [ -n "${CYBERSTRIKE_AI_API_KEY:-}" ]; then
+            sed -i "0,/^  api_key:.*/s|^  api_key:.*|  api_key: \"${CYBERSTRIKE_AI_API_KEY}\"|" "$CS_DATA/config.yaml"
+        fi
+        if [ -n "${CYBERSTRIKE_AI_BASE_URL:-}" ]; then
+            sed -i "0,/^  base_url:.*/s|^  base_url:.*|  base_url: ${CYBERSTRIKE_AI_BASE_URL}|" "$CS_DATA/config.yaml"
+        fi
+        if [ -n "${CYBERSTRIKE_AI_MODEL:-}" ]; then
+            sed -i "0,/^  model:.*/s|^  model:.*|  model: ${CYBERSTRIKE_AI_MODEL}|" "$CS_DATA/config.yaml"
+        fi
+        if [ -n "${CYBERSTRIKE_AI_PROVIDER:-}" ]; then
+            sed -i "0,/^  provider:.*/s|^  provider:.*|  provider: ${CYBERSTRIKE_AI_PROVIDER}|" "$CS_DATA/config.yaml"
+        fi
+
+        # 增量同步资源目录（不删除用户自定义文件，仅覆盖模板已有文件）
+        for dir in tools skills agents roles knowledge_base web; do
+            if [ -d "$CS_TEMPLATE/$dir" ]; then
+                mkdir -p "$CS_DATA/$dir"
+                cp -rn "$CS_TEMPLATE/$dir/." "$CS_DATA/$dir/" 2>/dev/null || true
+            fi
+        done
+        # data/ 和 tmp/ 仅创建空目录（运行时生成）
+        mkdir -p "$CS_DATA/data" "$CS_DATA/tmp"
+        chown -R app:app "$CS_DATA"
+        echo "==> [CyberStrikeAI] 配置目录: $CS_DATA"
+    else
+        echo "==> [CyberStrikeAI] 未找到编译产物，跳过初始化（镜像构建异常或被禁用）"
+    fi
+
+    # ==========================================
     # SSH Server 初始化（可选，通过挂载公钥文件启用）
     # 将宿主机公钥挂载到 /home/app/.ssh/authorized_keys 即可启用。
     # 必须在 gosu 降权之前（sshd 需要 root 权限）。

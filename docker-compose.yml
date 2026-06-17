@@ -9,6 +9,8 @@ services:
       - "127.0.0.1:4096:4096"
       # Code-Serve端口
       - "127.0.0.1:4097:8080"
+      # CyberStrikeAI Web UI 端口
+      - "127.0.0.1:4099:4099"
       # Zread 端口
       - "0.0.0.0:9681:9681"
       # SSH 端口
@@ -39,6 +41,12 @@ services:
       - GH_PROXY=${GH_PROXY:-} # GitHub 访问代理覆盖值，供 init-warp 或相关脚本使用
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-} # 需要绕过 WARP 的 Tailscale 网段
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-} # 额外绕过 WARP 的 CIDR 列表
+      # CyberStrikeAI
+      - CYBERSTRIKE_AI_PASSWORD=${CYBERSTRIKE_AI_PASSWORD} # CyberStrikeAI Web 登录密码（必填，entrypoint 会校验）
+      - CYBERSTRIKE_AI_API_KEY=${CYBERSTRIKE_AI_API_KEY:-} # CyberStrikeAI LLM API Key（留空则保留 config.yaml 原值）
+      - CYBERSTRIKE_AI_BASE_URL=${CYBERSTRIKE_AI_BASE_URL:-} # CyberStrikeAI LLM 基础 URL（如 https://api.deepseek.com/v1）
+      - CYBERSTRIKE_AI_MODEL=${CYBERSTRIKE_AI_MODEL:-} # CyberStrikeAI LLM 模型名（如 deepseek-chat）
+      - CYBERSTRIKE_AI_PROVIDER=${CYBERSTRIKE_AI_PROVIDER:-} # CyberStrikeAI LLM 提供商（openai 或 claude）
     ulimits:
       core:
         soft: 0
@@ -86,6 +94,10 @@ services:
       # 其他
       # === WRAP代理 ===
       - warp-data:/etc/wireguard
+
+      # === CyberStrikeAI ===
+      # config.yaml 和运行时数据（基准目录全部相对 config.yaml，放一起最省心）
+      - ./.local/share/cyberstrike:/home/app/.cyberstrike:rshared
       
     healthcheck:
       test: ["CMD", "/usr/local/bin/healthcheck.sh"]
