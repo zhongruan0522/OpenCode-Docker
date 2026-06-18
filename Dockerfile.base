@@ -326,6 +326,8 @@ RUN dpkg --add-architecture i386 \
         zstd \
         p7zip-full \
         unrar \
+        # 文件同步工具
+        rsync \
         openjdk-17-jdk-headless \
         libnss3 \
         libnspr4 \
