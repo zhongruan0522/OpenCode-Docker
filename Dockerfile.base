@@ -232,7 +232,35 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
         uro \
         bloodhound \
         impacket \
-        mcp
+        mcp \
+        # Z3r0 红队协作工作台运行时依赖
+        # Web 框架栈
+        fastapi \
+        "uvicorn[standard]" \
+        python-multipart \
+        sse-starlette \
+        websockets \
+        # 数据库（PostgreSQL 异步驱动 + ORM）
+        SQLAlchemy \
+        sqlmodel \
+        asyncpg \
+        # 数据校验与配置
+        pydantic \
+        pydantic-settings \
+        # OpenAI / 多智能体运行时
+        openai \
+        openai-agents \
+        tiktoken \
+        # 沙箱与远程执行（SSH + Docker SDK）
+        asyncssh \
+        docker \
+        # 通用工具
+        PyJWT \
+        python-dotenv \
+        jsonschema \
+        httpx-sse \
+        click \
+        tqdm
 
 # Playwright Chromium 浏览器（体积大头，单独一层）
 RUN mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
