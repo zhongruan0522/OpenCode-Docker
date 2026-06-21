@@ -165,6 +165,43 @@ RUN mkdir -p /opt/electron-cache/win32-x64 \
     && rm -f /tmp/electron-win32-x64.zip \
     && touch /opt/electron-cache/win32-x64/.version-${ELECTRON_VERSION}
 
+# APK 反编译工具链（apktool / jadx / dex2jar / uber-apk-signer）
+# Java 17 已在上面安装，所有工具基于 jar 运行
+ARG APKTOOL_VERSION=3.0.2
+ARG JADX_VERSION=1.5.5
+ARG DEX2JAR_VERSION=2.4.35
+ARG UBER_APK_SIGNER_VERSION=1.3.0
+RUN mkdir -p /opt/apk-tools/bin \
+    # apktool — 反编译/重打包 APK 资源和 smali
+    && curl -fsSL "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar" \
+       -o /opt/apk-tools/apktool.jar \
+    # jadx — dex 反编译为 Java 源码（zip 解压后 bin/ 下已有 jadx / jadx-gui 启动脚本）
+    && curl -fsSL "https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-${JADX_VERSION}.zip" \
+       -o /tmp/jadx.zip \
+    && unzip -q /tmp/jadx.zip -d /opt/apk-tools/jadx \
+    && rm -f /tmp/jadx.zip \
+    # dex2jar — dex 与 jar 互转
+    # 解压后根目录含 d2j-*.sh（不在 bin/ 下），lib/ 也同层，脚本靠 dirname 自身路径定位 lib
+    && curl -fsSL "https://github.com/ThexXTURBOXx/dex2jar/releases/download/${DEX2JAR_VERSION}/dex-tools-${DEX2JAR_VERSION}.zip" \
+       -o /tmp/dex-tools.zip \
+    && unzip -q /tmp/dex-tools.zip -d /tmp/dex-tools \
+    && mv /tmp/dex-tools/dex-tools-* /opt/apk-tools/dex2jar \
+    && rm -rf /tmp/dex-tools /tmp/dex-tools.zip \
+    # uber-apk-signer — APK 签名/zipalign/校验
+    && curl -fsSL "https://github.com/patrickfav/uber-apk-signer/releases/download/v${UBER_APK_SIGNER_VERSION}/uber-apk-signer-${UBER_APK_SIGNER_VERSION}.jar" \
+       -o /opt/apk-tools/uber-apk-signer.jar \
+    # 创建 wrapper 脚本，使命令行可直接调用
+    # apktool / uber-apk-signer：jar 入口，直接 java -jar
+    && printf '#!/usr/bin/env bash\nexec java -jar /opt/apk-tools/apktool.jar "$@"\n' > /opt/apk-tools/bin/apktool \
+    && printf '#!/usr/bin/env bash\nexec java -jar /opt/apk-tools/uber-apk-signer.jar "$@"\n' > /opt/apk-tools/bin/uber-apk-signer \
+    # dex2jar：d2j-*.sh 用 dirname 自身路径定位 lib，绝对路径调用即可，不要 cd（否则破坏用户相对路径）
+    && printf '#!/usr/bin/env bash\nexec /opt/apk-tools/dex2jar/d2j-dex2jar.sh "$@"\n' > /opt/apk-tools/bin/d2j-dex2jar \
+    && printf '#!/usr/bin/env bash\nexec /opt/apk-tools/dex2jar/d2j-baksmali.sh "$@"\n' > /opt/apk-tools/bin/d2j-baksmali \
+    && printf '#!/usr/bin/env bash\nexec /opt/apk-tools/dex2jar/d2j-asm-verify.sh "$@"\n' > /opt/apk-tools/bin/d2j-asm-verify \
+    && chmod +x /opt/apk-tools/bin/* \
+    && chmod +x /opt/apk-tools/jadx/bin/jadx /opt/apk-tools/jadx/bin/jadx-gui \
+    && chmod +x /opt/apk-tools/dex2jar/d2j-*.sh
+
 # uv (Python 包管理器)
 RUN curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTALL_DIR=/usr/local/bin sh \
     && rm -rf /opt/uv
@@ -388,7 +425,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     GRADLE_HOME=/opt/gradle-9.0.0
 
 ENV PNPM_HOME="/home/app/.local/share/pnpm" \
-    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
+    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
