@@ -27,6 +27,9 @@ ARG EAS_CLI_VERSION=latest
 ARG ELECTRON_VERSION=41.7.1
 ARG BUN_VERSION=1.3.14
 ARG PNPM_VERSION=10.33.2
+ARG JS_REVERSE_MCP_VERSION=2.1.6
+ARG ANYTHING_ANALYZER_VERSION=3.6.50
+ARG RADARE2_VERSION=6.1.6
 
 ENV GOLANG_VERSION=1.26.4
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
@@ -41,6 +44,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         gnupg \
+        jq \
         git \
         bash \
         gosu \
@@ -54,6 +58,7 @@ RUN apt-get update \
         vim \
         wget \
         unzip \
+        xz-utils \
         nano \
         tmux \
         ripgrep \
@@ -109,6 +114,8 @@ RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
         "platforms;android-35" \
         "platforms;android-34" \
         "platforms;android-30" \
+    && ln -sf "${ANDROID_SDK_ROOT}/build-tools/35.0.1/apksigner" /usr/local/bin/apksigner \
+    && ln -sf "${ANDROID_SDK_ROOT}/build-tools/35.0.1/zipalign" /usr/local/bin/zipalign \
     && rm -rf "${ANDROID_SDK_ROOT}/.temp"
 
 # Gradle 7.5 + 9.0
@@ -133,6 +140,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 
 # Playwright MCP（仅安装 npm 包，浏览器在下面单独装）
 RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
+    && npm install -g js-reverse-mcp@${JS_REVERSE_MCP_VERSION} \
     && npm install -g @larksuite/cli \
     && npm install -g wrangler@${WRANGLER_VERSION} \
     && npm install -g eas-cli@${EAS_CLI_VERSION}
@@ -202,6 +210,34 @@ RUN mkdir -p /opt/apk-tools/bin \
     && chmod +x /opt/apk-tools/jadx/bin/jadx /opt/apk-tools/jadx/bin/jadx-gui \
     && chmod +x /opt/apk-tools/dex2jar/d2j-*.sh
 
+# 逆向 GUI / MCP / CLI 工具链（Anything Analyzer / radare2）
+RUN set -eux; \
+    r2_arch="$(dpkg --print-architecture)"; \
+    case "${r2_arch}" in amd64|arm64) ;; *) echo "Unsupported radare2 architecture: ${r2_arch}" >&2; exit 1 ;; esac; \
+    r2_asset_url="$(curl -fsSL "https://api.github.com/repos/radareorg/radare2/releases/tags/${RADARE2_VERSION}" \
+      | jq -r --arg arch "${r2_arch}" '[.assets[] | select(.name | test("\\.(tar\\.gz|tar\\.xz|tgz)$"; "i")) | select(if $arch == "amd64" then (.name | test("(static.*(amd64|x86_64)|(amd64|x86_64).*static|linux.*(amd64|x86_64)|(amd64|x86_64).*linux)"; "i")) else (.name | test("(static.*(arm64|aarch64)|(arm64|aarch64).*static|linux.*(arm64|aarch64)|(arm64|aarch64).*linux)"; "i")) end) | .browser_download_url][0] // empty')"; \
+    test -n "${r2_asset_url}" || { echo "radare2 asset not found for ${r2_arch}" >&2; exit 1; }; \
+    mkdir -p /tmp/radare2-extract /opt/radare2; \
+    curl -fL --retry 5 --retry-all-errors --connect-timeout 30 --max-time 900 "${r2_asset_url}" -o /tmp/radare2.tar; \
+    tar -xf /tmp/radare2.tar -C /tmp/radare2-extract; \
+    r2_bin_dir="$(find /tmp/radare2-extract -type f -name radare2 -perm /111 -printf '%h\n' | sort | head -n 1)"; \
+    test -n "${r2_bin_dir}" || { echo "radare2 binary not found in archive" >&2; exit 1; }; \
+    r2_prefix="$(dirname "${r2_bin_dir}")"; \
+    cp -a "${r2_prefix}/." /opt/radare2/; \
+    for bin in /opt/radare2/bin/*; do [ -f "${bin}" ] && ln -sf "${bin}" "/usr/local/bin/$(basename "${bin}")"; done; \
+    rm -rf /tmp/radare2.tar /tmp/radare2-extract; \
+    aa_arch="$(dpkg --print-architecture)"; \
+    case "${aa_arch}" in amd64|arm64) ;; *) echo "Unsupported Anything Analyzer architecture: ${aa_arch}" >&2; exit 1 ;; esac; \
+    aa_tag="v${ANYTHING_ANALYZER_VERSION#v}"; \
+    aa_asset_url="$(curl -fsSL "https://api.github.com/repos/Mouseww/anything-analyzer/releases/tags/${aa_tag}" \
+      | jq -r --arg arch "${aa_arch}" '[.assets[] | select(.name | test("\\.AppImage$"; "i")) | select(if $arch == "amd64" then ((.name | test("(x86_64|x64|amd64)"; "i")) or ((.name | test("(arm64|aarch64)"; "i")) | not)) else (.name | test("(arm64|aarch64)"; "i")) end) | .browser_download_url][0] // empty')"; \
+    test -n "${aa_asset_url}" || { echo "Anything Analyzer AppImage not found for ${aa_arch}" >&2; exit 1; }; \
+    mkdir -p /opt/anything-analyzer; \
+    curl -fL --retry 5 --retry-all-errors --connect-timeout 30 --max-time 900 "${aa_asset_url}" -o /opt/anything-analyzer/anything-analyzer.AppImage; \
+    chmod +x /opt/anything-analyzer/anything-analyzer.AppImage; \
+    printf '#!/usr/bin/env bash\nexec /opt/anything-analyzer/anything-analyzer.AppImage --no-sandbox "$@"\n' > /usr/local/bin/anything-analyzer; \
+    chmod +x /usr/local/bin/anything-analyzer
+
 # uv (Python 包管理器)
 RUN curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTALL_DIR=/usr/local/bin sh \
     && rm -rf /opt/uv
@@ -233,6 +269,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
         bloodhound \
         impacket \
         mcp \
+        frida-tools \
         # Z3r0 红队协作工作台运行时依赖
         # Web 框架栈
         fastapi \
@@ -411,6 +448,14 @@ RUN dpkg --add-architecture i386 \
         libpango-1.0-0 \
         libcairo2 \
         libdbus-1-3 \
+        # Electron/AppImage GUI 运行时依赖（Anything Analyzer）
+        libfuse2 \
+        libgtk-3-0 \
+        libsecret-1-0 \
+        libxss1 \
+        libxtst6 \
+        libxshmfence1 \
+        xdg-utils \
         # 办公四件套运行时依赖（docx/xlsx/pptx/pdf skills）
         libreoffice-calc \
         libreoffice-writer \
@@ -453,7 +498,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     GRADLE_HOME=/opt/gradle-9.0.0
 
 ENV PNPM_HOME="/home/app/.local/share/pnpm" \
-    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
+    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.1:/opt/radare2/bin:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
