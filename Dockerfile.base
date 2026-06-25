@@ -247,12 +247,12 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
         defusedxml \
         numpy \
         PyYAML \
-        # HTTP 客户端（CyberStrikeAI 等项目运行时依赖）
+        # HTTP 客户端（项目运行时依赖）
         httpx \
         requests \
         charset-normalizer \
         "chardet>=5.2.0,<6" \
-        # CyberStrikeAI 工具链运行时依赖
+        # 安全测试工具链运行时依赖
         arjun \
         uro \
         bloodhound \

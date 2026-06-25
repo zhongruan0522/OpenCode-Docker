@@ -14,7 +14,6 @@ ARG CODE_SERVER_VERSION=4.115.0
 ARG CODEX_VERSION=latest
 ARG SERENA_VERSION=latest
 ARG CLAUDE_CODE_VERSION=latest
-ARG CYBERSTRIKE_VERSION=latest
 
 # code-server（自动更新检测）
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -40,24 +39,6 @@ RUN if ! command -v uv >/dev/null 2>&1; then \
     fi \
     && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
     && serena init
-
-# CyberStrikeAI（自动更新检测，源码 clone + go build）
-# Go 项目，运行时只需编译后的二进制 + web 静态资源。
-# 版本号 latest 时取最新 release tag，否则使用指定 tag（不带 v 前缀）。
-RUN CS_TAG="${CYBERSTRIKE_VERSION}" \
-    && if [ "${CS_TAG}" = "latest" ] || [ -z "${CS_TAG}" ]; then \
-         CS_TAG="$(curl -fsSL https://api.github.com/repos/Ed1s0nZ/CyberStrikeAI/releases/latest | jq -r '.tag_name')"; \
-       fi \
-    && echo "CyberStrikeAI version: ${CS_TAG}" \
-    && mkdir -p /opt/cyberstrike-ai \
-    && curl -fsSL "https://github.com/Ed1s0nZ/CyberStrikeAI/archive/refs/tags/${CS_TAG}.tar.gz" \
-       | tar -xz -C /opt/cyberstrike-ai --strip-components=1 \
-    && cd /opt/cyberstrike-ai \
-    && go mod download \
-    && CGO_ENABLED=1 go build -o cyberstrike-ai cmd/server/main.go \
-    # 清理编译产物和不需要运行时保留的源码目录，保留二进制 + web/ + 默认配置/角色/技能/工具模板
-    && rm -rf cmd internal docs images .git *.md LICENSE go.mod go.sum requirements.txt run.sh upgrade.sh \
-    && chmod +x /opt/cyberstrike-ai/cyberstrike-ai
 
 # 动态层覆盖启动配置。
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
