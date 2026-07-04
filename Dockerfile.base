@@ -38,15 +38,16 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     GOPATH=/home/app/go
 ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 
+# 系统依赖（含 build-essential，构建完就扔）
 # Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
-RUN mkdir -p /etc/apt/keyrings \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl gnupg \
+    && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
        | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" \
-       > /etc/apt/sources.list.d/adoptium.list
-
-# 系统依赖（含 build-essential，构建完就扔）
-RUN apt-get update \
+       > /etc/apt/sources.list.d/adoptium.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         locales \
         ca-certificates \
@@ -373,6 +374,8 @@ WORKDIR /app
 # Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
 RUN dpkg --add-architecture i386 \
     && sed -i 's/Components: main/Components: main non-free non-free-firmware/g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends curl gnupg \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
        | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
