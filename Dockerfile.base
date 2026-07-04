@@ -161,7 +161,9 @@ RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIG
 RUN npm install -g typescript eslint prettier esbuild tsx turbo oxlint
 
 # yarn（UnifyNook web 声明 packageManager: yarn@1.22.22）
-RUN npm install -g yarn@1.22.22
+# Node.js 24 镜像已内置 corepack 和 yarn shim，npm install -g 会 EEXIST 冲突。
+# 用 corepack prepare 固定 yarn 1.22.22 版本即可。
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
 # 办公四件套 Node.js 依赖（pptx/pdf skills）
 RUN npm install -g pptxgenjs prismjs mathjax-full skia-canvas pdf-lib pdfjs-dist
