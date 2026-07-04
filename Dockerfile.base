@@ -56,6 +56,7 @@ RUN apt-get update \
         python3-venv \
         build-essential \
         openjdk-17-jdk-headless \
+        openjdk-21-jdk-headless \
         vim \
         wget \
         unzip \
@@ -113,6 +114,7 @@ RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
         "build-tools;35.0.1" \
         "build-tools;30.0.2" \
         "platform-tools" \
+        "platforms;android-36" \
         "platforms;android-35" \
         "platforms;android-34" \
         "platforms;android-30" \
@@ -149,6 +151,9 @@ RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIG
 
 # 高频全局 npm 工具（出现在 3+ 项目）
 RUN npm install -g typescript eslint prettier esbuild tsx turbo oxlint
+
+# yarn（UnifyNook web 声明 packageManager: yarn@1.22.22）
+RUN npm install -g yarn@1.22.22
 
 # 办公四件套 Node.js 依赖（pptx/pdf skills）
 RUN npm install -g pptxgenjs prismjs mathjax-full skia-canvas pdf-lib pdfjs-dist
@@ -422,6 +427,7 @@ RUN dpkg --add-architecture i386 \
         # 文件同步工具
         rsync \
         openjdk-17-jdk-headless \
+        openjdk-21-jdk-headless \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \
@@ -477,11 +483,15 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     && apt-get install -y --no-install-recommends docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin iptables \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建架构无关的 JAVA_HOME 符号链接
-RUN JAVA_REAL_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")" \
-    && ln -sf "${JAVA_REAL_HOME}" /usr/lib/jvm/java-17-openjdk-current
+# 创建架构无关的 JAVA_HOME 符号链接（JDK 17 + JDK 21 共存，默认 21）
+# UnifyNook Android 要求 sourceCompatibility VERSION_21，默认指向 JDK 21
+# JDK 17 符号链接保留，旧项目可 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current 切换
+RUN JAVA_17_HOME="$(ls -d /usr/lib/jvm/java-17-openjdk-* | head -1)" \
+    && JAVA_21_HOME="$(ls -d /usr/lib/jvm/java-21-openjdk-* | head -1)" \
+    && ln -sf "${JAVA_17_HOME}" /usr/lib/jvm/java-17-openjdk-current \
+    && ln -sf "${JAVA_21_HOME}" /usr/lib/jvm/java-21-openjdk-current
 
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-current \
     ANDROID_SDK_ROOT=/opt/android-sdk \
     ANDROID_HOME=/opt/android-sdk \
     RUSTUP_HOME=/opt/rustup \
@@ -489,7 +499,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current \
     GRADLE_HOME=/opt/gradle-9.0.0
 
 ENV PNPM_HOME="/home/app/.local/share/pnpm" \
-    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.1:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
+    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.1:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-21-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
