@@ -38,6 +38,13 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     GOPATH=/home/app/go
 ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 
+# Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+       | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" \
+       > /etc/apt/sources.list.d/adoptium.list
+
 # 系统依赖（含 build-essential，构建完就扔）
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -56,7 +63,7 @@ RUN apt-get update \
         python3-venv \
         build-essential \
         openjdk-17-jdk-headless \
-        openjdk-21-jdk-headless \
+        temurin-21-jdk \
         vim \
         wget \
         unzip \
@@ -363,8 +370,14 @@ WORKDIR /app
 
 # 运行时依赖 + Playwright Chromium 系统库 + Wine（Windows 交叉编译）
 # 启用 non-free 组件，因为 unrar 仅在 non-free 仓库中提供
+# Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
 RUN dpkg --add-architecture i386 \
     && sed -i 's/Components: main/Components: main non-free non-free-firmware/g' /etc/apt/sources.list.d/debian.sources \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+       | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" \
+       > /etc/apt/sources.list.d/adoptium.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         locales \
@@ -427,7 +440,7 @@ RUN dpkg --add-architecture i386 \
         # 文件同步工具
         rsync \
         openjdk-17-jdk-headless \
-        openjdk-21-jdk-headless \
+        temurin-21-jdk \
         libnss3 \
         libnspr4 \
         libatk1.0-0 \
@@ -486,8 +499,9 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
 # 创建架构无关的 JAVA_HOME 符号链接（JDK 17 + JDK 21 共存，默认 21）
 # UnifyNook Android 要求 sourceCompatibility VERSION_21，默认指向 JDK 21
 # JDK 17 符号链接保留，旧项目可 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current 切换
+# JDK 21 来自 Adoptium Temurin（Debian bookworm 默认仓库不提供 OpenJDK 21）
 RUN JAVA_17_HOME="$(ls -d /usr/lib/jvm/java-17-openjdk-* | head -1)" \
-    && JAVA_21_HOME="$(ls -d /usr/lib/jvm/java-21-openjdk-* | head -1)" \
+    && JAVA_21_HOME="$(ls -d /usr/lib/jvm/temurin-21-* | head -1)" \
     && ln -sf "${JAVA_17_HOME}" /usr/lib/jvm/java-17-openjdk-current \
     && ln -sf "${JAVA_21_HOME}" /usr/lib/jvm/java-21-openjdk-current
 
