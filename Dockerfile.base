@@ -41,7 +41,7 @@ ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:${ANDROID_SDK_ROOT}/cm
 # 系统依赖（含 build-essential，构建完就扔）
 # Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl gnupg \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
        | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
@@ -375,7 +375,7 @@ WORKDIR /app
 RUN dpkg --add-architecture i386 \
     && sed -i 's/Components: main/Components: main non-free non-free-firmware/g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
-    && apt-get install -y --no-install-recommends curl gnupg \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
        | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
