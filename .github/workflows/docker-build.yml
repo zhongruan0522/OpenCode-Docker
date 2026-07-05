@@ -6,13 +6,11 @@ on:
       - main
     paths:
       - 'Dockerfile'
-      - 'docker/**'
   pull_request:
     branches:
       - main
     paths:
       - 'Dockerfile'
-      - 'docker/**'
   workflow_dispatch:
     inputs:
       opencode_version:
