@@ -26,3 +26,11 @@
 | `backend/` | 控制台后端 | OpenCode serve 相关的后端服务逻辑 |
 | `frontend/` | 控制台前端 | code-server 相关的前端服务逻辑 |
 | `docker/` | Docker 启动 | 镜像启动文件（entrypoint.sh、healthcheck.sh）和进程管理配置（supervisord.conf） |
+
+## 如何验收编译
+
+> 如果用户没说不验证则一律根据以下方法判断
+
+1. Commit
+2. Push
+3. 直接盯着对应工作流的运行，Base层和动态层均要长时间看
