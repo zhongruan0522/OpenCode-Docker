@@ -30,13 +30,14 @@ ARG PNPM_VERSION=10.33.2
 ARG JS_REVERSE_MCP_VERSION=2.1.6
 ARG ANYTHING_ANALYZER_VERSION=3.6.50
 ARG RADARE2_VERSION=6.1.6
+ARG FLUTTER_VERSION=3.44.4
 
 ENV GOLANG_VERSION=1.26.4
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     BUN_INSTALL=/opt/bun \
     GOPATH=/home/app/go
-ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
+ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/flutter/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 
 # 系统依赖（含 build-essential，构建完就扔）
 # Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
@@ -129,6 +130,15 @@ RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
     && ln -sf "${ANDROID_SDK_ROOT}/build-tools/35.0.1/apksigner" /usr/local/bin/apksigner \
     && ln -sf "${ANDROID_SDK_ROOT}/build-tools/35.0.1/zipalign" /usr/local/bin/zipalign \
     && rm -rf "${ANDROID_SDK_ROOT}/.temp"
+
+# Flutter SDK（依赖上面的 Android SDK、JDK、Gradle）
+# Dart pub 缓存目录归 app 用户，避免容器启动后重新下载
+RUN curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+        -o /tmp/flutter.tar.xz \
+    && tar -xf /tmp/flutter.tar.xz -C /opt \
+    && rm -f /tmp/flutter.tar.xz \
+    && /opt/flutter/bin/flutter --version \
+    && chown -R app:app /opt/flutter
 
 # Gradle 7.5 + 9.0
 ENV GRADLE_HOME=/opt/gradle
@@ -518,7 +528,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-current \
     GRADLE_HOME=/opt/gradle-9.0.0
 
 ENV PNPM_HOME="/home/app/.local/share/pnpm" \
-    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.1:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-21-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
+    PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/flutter/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.1:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-21-openjdk-current/bin:/home/app/.local/share/pnpm:${PATH}" \
     GOPATH="/home/app/go" \
     BUN_INSTALL="/opt/bun" \
     PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
