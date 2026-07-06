@@ -132,15 +132,13 @@ RUN mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools" \
     && rm -rf "${ANDROID_SDK_ROOT}/.temp"
 
 # Flutter SDK（依赖上面的 Android SDK、JDK、Gradle）
-# Dart pub 缓存目录归 app 用户，避免容器启动后重新下载
 # Flutter tarball 本身是 git 仓库，构建阶段以 root 运行 flutter 预热时，
 # git 会因目录所有权触发 dubious ownership 报错，需配置 safe.directory。
-# 运行时 app 用户是目录 owner，不受影响。
+# builder 阶段无 app 用户，目录归属在最终阶段 COPY --chown=app:app 时统一设置。
 RUN curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
         -o /tmp/flutter.tar.xz \
     && tar -xf /tmp/flutter.tar.xz -C /opt \
     && rm -f /tmp/flutter.tar.xz \
-    && chown -R app:app /opt/flutter \
     && git config --global --add safe.directory /opt/flutter \
     && /opt/flutter/bin/flutter --version
 
