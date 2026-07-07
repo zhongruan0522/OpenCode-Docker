@@ -148,6 +148,43 @@ EOF
         echo "==> [SSH] SSH Server 未启用 (挂载公钥到 /home/app/.ssh/authorized_keys 以启用)"
     fi
 
+    # ==========================================
+    # 远程桌面 (xrdp) 初始化（可选，通过 ENABLE_DESKTOP=1 开启）
+    # xrdp 需要 root 权限（绑定端口 + PAM 认证），不能放进 supervisord（supervisord 以 app 用户运行）
+    # 容器内无 systemd，必须手动启动 xrdp-sesman（会话管理器）和 xrdp（RDP 守护进程）
+    # 默认桌面：LXQt；中文输入法：fcitx5；端口：3390
+    # 登录凭据：与 SSH 共用 app 用户，密码通过 DESKTOP_PASSWORD 环境变量设置（默认 "app"）
+    # ==========================================
+    if [ "${ENABLE_DESKTOP:-0}" = "1" ]; then
+        echo "==> [Desktop] 初始化 xrdp + LXQt 远程桌面..."
+
+        # 设置 app 用户的 RDP 登录密码
+        DESKTOP_PASSWORD="${DESKTOP_PASSWORD:-app}"
+        echo "app:${DESKTOP_PASSWORD}" | chpasswd
+
+        # 创建 app 用户的 .xsession 文件，xrdp 通过它判断启动哪个桌面
+        cat > /home/app/.xsession <<'XSESSION_EOF'
+exec startlxqt
+XSESSION_EOF
+        chown app:app /home/app/.xsession
+        chmod 644 /home/app/.xsession
+
+        # 修复 xrdp 运行时目录权限（ssl-cert 组成员由 Dockerfile.base 配置）
+        mkdir -p /var/run/xrdp /tmp/.X11-unix
+        touch /var/log/xrdp.log /var/log/xrdp-sesman.log
+        chown xrdp:xrdp /var/run/xrdp /var/log/xrdp.log /var/log/xrdp-sesman.log
+        chmod 2775 /var/run/xrdp
+        chmod 1777 /tmp/.X11-unix
+
+        # 先启动会话管理器，再启动 RDP 守护进程
+        xrdp-sesman
+        xrdp
+        echo "==> [Desktop] xrdp 已启动，端口 3390，用户 app，登录密码由 DESKTOP_PASSWORD 提供"
+        echo "==> [Desktop] RDP 客户端连接：localhost:3390（或宿主机映射端口）"
+    else
+        echo "==> [Desktop] 远程桌面未启用 (设置 ENABLE_DESKTOP=1 以启用)"
+    fi
+
     exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
 fi
 

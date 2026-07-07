@@ -501,6 +501,23 @@ RUN dpkg --add-architecture i386 \
         wine32 \
         mono-complete \
         nsis \
+        # 远程桌面 (xrdp + LXQt)
+        # LXQt 是 Qt 实现的轻量桌面环境，中文字体由 fonts-noto-cjk 提供
+        # xrdp/xorgxrdp 提供 RDP 协议接入，openbox 是 LXQt 默认窗口管理器
+        # dbus-x11/policykit-1 让 X 会话内的权限弹窗和系统总线正常工作
+        # fcitx5 + fcitx5-chinese-addons 提供中文输入法
+        xrdp \
+        xorgxrdp \
+        lxqt \
+        openbox \
+        qterminal \
+        pcmanfm-qt \
+        dbus-x11 \
+        policykit-1 \
+        fcitx5 \
+        fcitx5-frontend-qt5 \
+        fcitx5-chinese-addons \
+    && usermod -aG ssl-cert xrdp \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
@@ -512,6 +529,39 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     && apt-get update \
     && apt-get install -y --no-install-recommends docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin iptables \
     && rm -rf /var/lib/apt/lists/*
+
+# xrdp 配置
+# - xrdp.ini: 端口改为 3390（避免与宿主机 RDP 默认 3389 冲突），
+#             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用
+# - startwm.sh: 完全覆盖，启动 dbus 会话总线 + fcitx5 中文输入法 + LXQt 会话
+# 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
+RUN sed -i \
+    -e 's/^port=3389/port=3390/' \
+    -e 's/^max_bpp=32/max_bpp=24/' \
+    -e 's/^crypt_level=high/crypt_level=client/' \
+    -e 's/^bitmap_cache=true/bitmap_cache=false/' \
+    -e 's/^#\?tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' \
+    /etc/xrdp/xrdp.ini \
+    # 完全覆盖 startwm.sh：容器内无 systemd，需要手动启动 dbus 会话总线和 fcitx5
+    && printf '#!/bin/sh\n\
+# xrdp 容器定制启动脚本\n\
+# 加载系统 profile（locale、PATH 等环境变量）\n\
+if test -r /etc/profile; then\n\
+    . /etc/profile\n\
+fi\n\
+\n\
+# 启动 dbus 会话总线（LXQt/polkit 依赖）\n\
+if command -v dbus-launch >/dev/null 2>&1; then\n\
+    eval "$(dbus-launch --sh-syntax --exit-with-session)"\n\
+    export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID\n\
+fi\n\
+\n\
+# 启动 fcitx5 中文输入法\n\
+fcitx5 -d --replace >/dev/null 2>&1 &\n\
+\n\
+# 启动 LXQt 会话\n\
+exec startlxqt\n' > /etc/xrdp/startwm.sh \
+    && chmod +x /etc/xrdp/startwm.sh
 
 # 创建架构无关的 JAVA_HOME 符号链接（JDK 17 + JDK 21 共存，默认 21）
 # UnifyNook Android 要求 sourceCompatibility VERSION_21，默认指向 JDK 21

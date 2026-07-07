@@ -11,6 +11,8 @@ services:
       - "127.0.0.1:4097:8080"
       # SSH 端口
       - "0.0.0.0:2223:2223"
+      # 远程桌面 (RDP) 端口
+      - "127.0.0.1:3390:3390"
     environment:
       # OpenCode
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME} # OpenCode 服务登录用户名，entrypoint 会校验必填
@@ -39,6 +41,9 @@ services:
       - GH_PROXY=${GH_PROXY:-} # GitHub 访问代理覆盖值，供 init-warp 或相关脚本使用
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-} # 需要绕过 WARP 的 Tailscale 网段
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-} # 额外绕过 WARP 的 CIDR 列表
+      # 远程桌面 (xrdp + LXQt)
+      - ENABLE_DESKTOP=${ENABLE_DESKTOP:-0} # 是否启用 xrdp 远程桌面，启用后端口 3390
+      - DESKTOP_PASSWORD=${DESKTOP_PASSWORD:-app} # RDP 登录密码（用户名 app），建议改为强密码
     ulimits:
       core:
         soft: 0
