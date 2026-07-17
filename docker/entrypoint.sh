@@ -121,6 +121,11 @@ if [ "$(id -u)" = '0' ]; then
             ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N '' -q
         fi
 
+        # 强制修正 host key 权限：容器重启或某些挂载场景会导致权限变宽（如 0777），
+        # sshd 会拒绝使用过宽权限的私钥，导致公钥认证失效。
+        chmod 600 /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key 2>/dev/null || true
+        chmod 644 /etc/ssh/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_rsa_key.pub 2>/dev/null || true
+
         cat > /etc/ssh/sshd_config.d/opencode.conf <<EOF
 Port 2223
 PermitRootLogin yes
@@ -176,7 +181,14 @@ XSESSION_EOF
         chmod 2775 /var/run/xrdp
         chmod 1777 /tmp/.X11-unix
 
+        # 清理上次运行残留的 pid 文件：
+        # 容器重启时进程已死，但 /var/run/xrdp/xrdp-sesman.pid 可能残留，
+        # 导致 xrdp-sesman 误判为 "is already running" 并以非零退出，
+        # 在 set -e 作用下会让整个 entrypoint 退出、容器陷入重启循环。
+        rm -f /var/run/xrdp/xrdp-sesman.pid /var/run/xrdp/xrdp.pid
+
         # 先启动会话管理器，再启动 RDP 守护进程
+        # xrdp-sesman/xrdp 以 daemon 模式运行（默认行为），立即返回 0
         xrdp-sesman
         xrdp
         echo "==> [Desktop] xrdp 已启动，端口 3390，用户 app，登录密码由 DESKTOP_PASSWORD 提供"
