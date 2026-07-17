@@ -155,7 +155,7 @@ EOF
     # 默认桌面：LXQt；中文输入法：fcitx5；端口：3390
     # 登录凭据：与 SSH 共用 app 用户，密码通过 DESKTOP_PASSWORD 环境变量设置（默认 "app"）
     # ==========================================
-    if [ "${ENABLE_DESKTOP:-0}" = "1" ]; then
+    if [ "${ENABLE_DESKTOP:-1}" = "1" ]; then
         echo "==> [Desktop] 初始化 xrdp + LXQt 远程桌面..."
 
         # 设置 app 用户的 RDP 登录密码
@@ -182,7 +182,7 @@ XSESSION_EOF
         echo "==> [Desktop] xrdp 已启动，端口 3390，用户 app，登录密码由 DESKTOP_PASSWORD 提供"
         echo "==> [Desktop] RDP 客户端连接：localhost:3390（或宿主机映射端口）"
     else
-        echo "==> [Desktop] 远程桌面未启用 (设置 ENABLE_DESKTOP=1 以启用)"
+        echo "==> [Desktop] 远程桌面已禁用 (ENABLE_DESKTOP=${ENABLE_DESKTOP})"
     fi
 
     exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf

@@ -42,7 +42,7 @@ services:
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-} # 需要绕过 WARP 的 Tailscale 网段
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-} # 额外绕过 WARP 的 CIDR 列表
       # 远程桌面 (xrdp + LXQt)
-      - ENABLE_DESKTOP=${ENABLE_DESKTOP:-0} # 是否启用 xrdp 远程桌面，启用后端口 3390
+      - ENABLE_DESKTOP=${ENABLE_DESKTOP:-1} # 是否启用 xrdp 远程桌面，默认启用，端口 3390
       - DESKTOP_PASSWORD=${DESKTOP_PASSWORD:-app} # RDP 登录密码（用户名 app），建议改为强密码
     ulimits:
       core:
