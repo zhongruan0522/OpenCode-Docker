@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1">
+  <property name="Gtk" type="empty">
+    <property name="IconThemeName" type="string" value="Papirus"/>
+    <property name="CursorThemeName" type="string" value="default"/>
+  </property>
+</channel>

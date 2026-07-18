@@ -541,59 +541,21 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
 # xrdp 配置
 # - xrdp.ini: 端口改为 3390（避免与宿主机 RDP 默认 3389 冲突），
 #             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用
-# - startwm.sh: 完全覆盖，启动 dbus 会话总线 + fcitx5 中文输入法 + XFCE4 会话
+# - startwm.sh: 启动 dbus 会话总线 + fcitx5 中文输入法 + XFCE4 会话
+#   通过 COPY docker/xrdp-startwm.sh 注入（见文件末尾 COPY 块）
+# - xsettings.xml: XFCE 默认图标主题设为 Papirus
+#   通过 COPY docker/xfce-xsettings.xml 注入（见文件末尾 COPY 块）
 # 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
+# 注意：不要在 RUN 里用 `cmd1 && cmd2 <<EOF ... EOF` 这种"复合命令 + shell heredoc"形式，
+#       BuildKit 的 Dockerfile 解析器会把 heredoc 后续行当成新 Dockerfile 指令报
+#       "unknown instruction"。大段配置文件统一通过 COPY docker/ 注入。
 RUN sed -i \
     -e 's/^port=3389/port=3390/' \
     -e 's/^max_bpp=32/max_bpp=24/' \
     -e 's/^crypt_level=high/crypt_level=client/' \
     -e 's/^bitmap_cache=true/bitmap_cache=false/' \
     -e 's/^#\?tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' \
-    /etc/xrdp/xrdp.ini \
-    # 完全覆盖 startwm.sh：容器内无 systemd，需要手动启动 dbus 会话总线和 fcitx5
-    # 用 heredoc 写入，避免 printf '\n\' 在生成的脚本里留下尾随反斜杠
-    && cat > /etc/xrdp/startwm.sh <<'STARTWM_EOF'
-#!/bin/sh
-# xrdp 容器定制启动脚本
-# 加载系统 profile（locale、PATH 等环境变量）
-if test -r /etc/profile; then
-    . /etc/profile
-fi
-
-# 输入法环境变量必须在 startxfce4 之前导出，
-# 否则 GTK/Qt 应用启动后无法切换出 fcitx5
-export GTK_IM_MODULE=fcitx
-export QT_IM_MODULE=fcitx
-export XMODIFIERS=@im=fcitx
-export SDL_IM_MODULE=fcitx
-export GLFW_IM_MODULE=ibus
-
-# 启动 dbus 会话总线（XFCE/polkit/Thunar 依赖）
-if command -v dbus-launch >/dev/null 2>&1; then
-    eval "$(dbus-launch --sh-syntax --exit-with-session)"
-    export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
-fi
-
-# 启动 fcitx5 中文输入法（-d 后台 --replace 接管已有会话）
-fcitx5 -d --replace >/dev/null 2>&1 &
-
-# 启动 XFCE4 会话（xfwm4 窗口管理器 + xfce4-panel + xfdesktop 桌面图标）
-exec startxfce4
-STARTWM_EOF
-    && chmod +x /etc/xrdp/startwm.sh \
-    # XFCE 默认图标主题改成 Papirus（apt 装的 papirus-icon-theme）
-    # /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/*.xml 是 xfconf channel 的全局默认值
-    # 用户首次登录时 xfce4-session 会把这里的内容拷到 ~/.config/xfce4/xfconf/ 作为初始配置
-    && mkdir -p /etc/xdg/xfce4/xfconf/xfce-perchannel-xml \
-    && cat > /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml <<'XSETTINGS_EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xsettings" version="1">
-  <property name="Gtk" type="empty">
-    <property name="IconThemeName" type="string" value="Papirus"/>
-    <property name="CursorThemeName" type="string" value="default"/>
-  </property>
-</channel>
-XSETTINGS_EOF
+    /etc/xrdp/xrdp.ini
 
 # 创建架构无关的 JAVA_HOME 符号链接（JDK 17 + JDK 21 共存，默认 21）
 # UnifyNook Android 要求 sourceCompatibility VERSION_21，默认指向 JDK 21
@@ -652,7 +614,11 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY base/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh
+# xrdp + XFCE4 启动脚本和默认配置（不走 RUN heredoc 是为了避免 BuildKit
+# 解析器把"复合命令 + shell heredoc"中的 heredoc 内容误判为 Dockerfile 指令）
+COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
+COPY docker/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /etc/xrdp/startwm.sh
 
 WORKDIR /workspace
 
