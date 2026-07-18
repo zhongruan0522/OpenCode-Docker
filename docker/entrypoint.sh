@@ -157,11 +157,13 @@ EOF
     # 远程桌面 (xrdp) 初始化（可选，通过 ENABLE_DESKTOP=1 开启）
     # xrdp 需要 root 权限（绑定端口 + PAM 认证），不能放进 supervisord（supervisord 以 app 用户运行）
     # 容器内无 systemd，必须手动启动 xrdp-sesman（会话管理器）和 xrdp（RDP 守护进程）
-    # 默认桌面：LXQt；中文输入法：fcitx5；端口：3390
+    # 同时手动拉起系统 D-Bus（xfce4-polkit / udisks2 / Thunar 挂载都依赖它）
+    # 默认桌面：XFCE4（xfwm4 窗口管理器 + xfce4-panel 任务栏 + xfdesktop 桌面图标）
+    # 中文输入法：fcitx5；端口：3390
     # 登录凭据：与 SSH 共用 app 用户，密码通过 DESKTOP_PASSWORD 环境变量设置（默认 "app"）
     # ==========================================
     if [ "${ENABLE_DESKTOP:-1}" = "1" ]; then
-        echo "==> [Desktop] 初始化 xrdp + LXQt 远程桌面..."
+        echo "==> [Desktop] 初始化 xrdp + XFCE4 远程桌面..."
 
         # 设置 app 用户的 RDP 登录密码
         DESKTOP_PASSWORD="${DESKTOP_PASSWORD:-app}"
@@ -169,10 +171,23 @@ EOF
 
         # 创建 app 用户的 .xsession 文件，xrdp 通过它判断启动哪个桌面
         cat > /home/app/.xsession <<'XSESSION_EOF'
-exec startlxqt
+exec startxfce4
 XSESSION_EOF
         chown app:app /home/app/.xsession
         chmod 644 /home/app/.xsession
+
+        # 启动系统 D-Bus（容器内无 systemd 不会自动起）
+        # 解决 XFCE 下 polkit / udisks2 / Thunar 挂载 / 网络管理器等组件的 "Not connected to D-Bus server"
+        if command -v dbus-daemon >/dev/null 2>&1; then
+            mkdir -p /run/dbus
+            # 若已有 dbus-daemon 在跑（容器热重启场景），先静默干掉再重启
+            if [ -f /run/dbus/pid ]; then
+                kill "$(cat /run/dbus/pid 2>/dev/null)" 2>/dev/null || true
+                rm -f /run/dbus/pid
+            fi
+            dbus-daemon --system --fork
+            echo "==> [Desktop] 系统 D-Bus 已启动"
+        fi
 
         # 修复 xrdp 运行时目录权限（ssl-cert 组成员由 Dockerfile.base 配置）
         mkdir -p /var/run/xrdp /tmp/.X11-unix
