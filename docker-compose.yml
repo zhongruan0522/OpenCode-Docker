@@ -11,6 +11,8 @@ services:
       - "127.0.0.1:4097:8080"
       # SSH 端口
       - "0.0.0.0:2223:2223"
+      # SOCKS5 代理端口（MicroWARP，解除注释以对外暴露；内层 Docker 容器通过桥接网关 IP 即可访问，无需暴露）
+      # - "127.0.0.1:1080:1080"
       # 远程桌面 (RDP) 端口
       - "127.0.0.1:3390:3390"
     environment:
@@ -35,6 +37,7 @@ services:
       # MicroWARP
       - ENABLE_WARP=${ENABLE_WARP:-1} # 是否启用 MicroWARP 初始化；关闭后不会注入 SOCKS5_PROXY
       - WARP_SOCKS_PORT=${WARP_SOCKS_PORT:-1080} # MicroWARP SOCKS 端口
+      - WARP_SOCKS_BIND=${WARP_SOCKS_BIND:-0.0.0.0} # MicroWARP SOCKS 监听地址（0.0.0.0 对外可见，127.0.0.1 仅容器内）
       - SOCKS_USER=${SOCKS_USER:-} # MicroWARP SOCKS 认证用户名，留空则不启用用户名
       - SOCKS_PASS=${SOCKS_PASS:-} # MicroWARP SOCKS 认证密码，留空则不启用密码
       - ENDPOINT_IP=${ENDPOINT_IP:-} # 指定 WARP endpoint IP，留空由 init-warp 自动选择

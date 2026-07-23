@@ -1,7 +1,8 @@
 #!/bin/sh
 # MicroWARP 初始化脚本
 # 基于 https://github.com/ccbkkb/MicroWARP，缝合进 OpenCode-Docker
-# 仅提供内部 SOCKS5 代理，不对外暴露端口
+# 提供 SOCKS5 代理（默认监听 0.0.0.0，容器内/内层 Docker 均可使用）
+# 可通过 WARP_SOCKS_BIND 环境变量控制监听地址
 #
 # 路由策略：WARP 仅作为出口代理，opencode 的入站 HTTP 服务回包
 # 和内网通信走原始默认路由，不经过 WARP
@@ -18,6 +19,7 @@ warp_fail() { echo "==> [WARP] ❌ WARP 代理启动失败 (日志: $_EXEC_LOG)"
 
 WG_CONF="/etc/wireguard/wg0.conf"
 WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
+WARP_SOCKS_BIND="${WARP_SOCKS_BIND:-0.0.0.0}"
 mkdir -p /etc/wireguard
 
 # wgcf 下载辅助函数，支持 GH_PROXY 代理前缀
@@ -166,16 +168,16 @@ if [ -n "$PRE_WARP_GW" ] && [ -n "$PRE_WARP_DEV" ]; then
 fi
 
 # ==========================================
-# 阶段 4：启动 SOCKS5 代理（仅监听 localhost）
+# 阶段 4：启动 SOCKS5 代理
 # ==========================================
-warp_log "启动 MicroSOCKS 引擎，监听 127.0.0.1:${WARP_SOCKS_PORT}"
+warp_log "启动 MicroSOCKS 引擎，监听 ${WARP_SOCKS_BIND}:${WARP_SOCKS_PORT}"
 
 if [ -n "${SOCKS_USER:-}" ] && [ -n "${SOCKS_PASS:-}" ]; then
     warp_log "SOCKS5 认证已开启 (User: $SOCKS_USER)"
-    microsocks -i 127.0.0.1 -p "$WARP_SOCKS_PORT" \
+    microsocks -i "$WARP_SOCKS_BIND" -p "$WARP_SOCKS_PORT" \
         -u "$SOCKS_USER" -P "$SOCKS_PASS" &
 else
-    microsocks -i 127.0.0.1 -p "$WARP_SOCKS_PORT" &
+    microsocks -i "$WARP_SOCKS_BIND" -p "$WARP_SOCKS_PORT" &
 fi
 
 WARP_PID=$!
