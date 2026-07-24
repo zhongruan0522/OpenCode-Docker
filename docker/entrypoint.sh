@@ -212,6 +212,20 @@ XSESSION_EOF
         echo "==> [Desktop] 远程桌面已禁用 (ENABLE_DESKTOP=${ENABLE_DESKTOP})"
     fi
 
+    # ==========================================
+    # DinD dockerd 开关（默认关闭以节省内存）
+    # supervisord.conf 里 dockerd 默认 autostart=false，
+    # 这里根据 ENABLE_DOCKERD 决定是否改为自启。
+    # 运行中随时可手动拉起：supervisorctl start dockerd
+    # ==========================================
+    SUPERVISOR_CONF="/etc/supervisor/supervisord.conf"
+    if [ "${ENABLE_DOCKERD:-0}" = "1" ]; then
+        sed -i '/^\[program:dockerd\]/,/^\[/ s/^autostart=false/autostart=true/' "$SUPERVISOR_CONF"
+        echo "==> [DockerD] 开机自启已启用 (ENABLE_DOCKERD=1)"
+    else
+        echo "==> [DockerD] 开机自启已关闭 (默认)。需要时运行: supervisorctl start dockerd"
+    fi
+
     exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
 fi
 
