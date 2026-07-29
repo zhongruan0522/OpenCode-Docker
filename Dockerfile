@@ -14,6 +14,7 @@ ARG CODE_SERVER_VERSION=4.115.0
 ARG CODEX_VERSION=latest
 ARG SERENA_VERSION=latest
 ARG CLAUDE_CODE_VERSION=latest
+ARG OPEN_DESIGN_VERSION=0.16.1
 
 # code-server（自动更新检测）
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -39,6 +40,35 @@ RUN if ! command -v uv >/dev/null 2>&1; then \
     fi \
     && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install -p 3.13 "serena-agent@${SERENA_VERSION}" --prerelease=allow \
     && serena init
+
+# Open Design（自动更新检测，从源码 clone + build）
+# 构建 daemon 后端 + web 前端（Next.js 静态导出到 apps/web/out），并复制
+# skills/design-systems/craft/prompt-templates 等资源目录。
+# 构建依赖（build-essential、python3、make、g++、pnpm）已由 base 镜像提供。
+RUN git clone --depth 1 --branch "open-design-v${OPEN_DESIGN_VERSION}" \
+         https://github.com/nexu-io/open-design.git /tmp/open-design \
+    && cd /tmp/open-design \
+    && pnpm install --frozen-lockfile \
+    && pnpm --filter @open-design/daemon build \
+    && pnpm --filter @open-design/web build \
+    && pnpm --filter @open-design/daemon deploy --legacy --prod /tmp/od-deploy/daemon \
+    # 安装产物到 /opt/open-design
+    && mkdir -p /opt/open-design/apps/daemon /opt/open-design/apps/web \
+    && cp -r /tmp/od-deploy/daemon /opt/open-design/apps/ \
+    && cp -r /tmp/open-design/apps/web/out /opt/open-design/apps/web/out \
+    && cp -r /tmp/open-design/skills /opt/open-design/skills \
+    && cp -r /tmp/open-design/design-systems /opt/open-design/design-systems \
+    && cp -r /tmp/open-design/craft /opt/open-design/craft \
+    && cp -r /tmp/open-design/prompt-templates /opt/open-design/prompt-templates \
+    && mkdir -p /opt/open-design/assets \
+    && cp -r /tmp/open-design/assets/frames /opt/open-design/assets/frames \
+    && cp -r /tmp/open-design/assets/community-pets /opt/open-design/assets/community-pets \
+    # cp -r 不会自动创建中间目录，必须先建 plugins 父目录再复制 _official
+    && mkdir -p /opt/open-design/plugins \
+    && cp -r /tmp/open-design/plugins/_official /opt/open-design/plugins/_official \
+    && mkdir -p /opt/open-design/.od \
+    # 清理源码
+    && rm -rf /tmp/open-design /tmp/od-deploy
 
 # 动态层覆盖启动配置。
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh

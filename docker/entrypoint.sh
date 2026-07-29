@@ -102,6 +102,32 @@ if [ "$(id -u)" = '0' ]; then
 
     # 提前创建并修正 code-server 的配置/数据目录，避免首次启动时权限错乱。
     mkdir -p /home/app/.config/code-server /home/app/.local/share/code-server
+
+    # supervisord 配置路径，供下方各段落的 sed 改写使用。
+    SUPERVISOR_CONF="/etc/supervisor/supervisord.conf"
+
+    # ==========================================
+    # Open Design 初始化（自动启用）
+    # supervisord 的 environment= 不会继承容器环境变量，必须在这里把
+    # OD_API_TOKEN 写进 supervisord.conf，否则 daemon 检测到绑定了
+    # 0.0.0.0 却没有 token 会拒绝启动，autorestart 陷入循环。
+    # 未设置 OD_API_TOKEN 时自动生成随机 token 并打印到日志。
+    # ==========================================
+    mkdir -p /opt/open-design/.od
+    if [ -z "${OD_API_TOKEN:-}" ]; then
+        OD_API_TOKEN=$(openssl rand -hex 32)
+        export OD_API_TOKEN
+        echo "==> [Open Design] 自动生成 API Token: ${OD_API_TOKEN}"
+    else
+        echo "==> [Open Design] 使用用户提供的 API Token"
+    fi
+    chown -R app:app /opt/open-design/.od
+    # 将 token 追加到 [program:open-design] 的 environment 行（& 表示整段匹配文本）
+    sed -i "s|^environment=HOME=\"/home/app\",USER=\"app\",SHELL=\"/bin/bash\",NODE_ENV=\"production\",NODE_OPTIONS=\"--max-old-space-size=192\",OD_BIND_HOST=\"0.0.0.0\",OD_PORT=\"4098\",OD_DATA_DIR=\"/opt/open-design/.od\"$|&,OD_API_TOKEN=\"${OD_API_TOKEN}\"|" "$SUPERVISOR_CONF"
+    # 只启用 open-design 的自启（用区段限定，避免误改 dockerd 的 autostart=false）
+    sed -i '/^\[program:open-design\]/,/^\[/ s/^autostart=false/autostart=true/' "$SUPERVISOR_CONF"
+    echo "==> [Open Design] 已启用，端口 4098"
+
     chown -R app:app /home/app /workspace 2>/dev/null || true
 
     # ==========================================
@@ -218,7 +244,6 @@ XSESSION_EOF
     # 这里根据 ENABLE_DOCKERD 决定是否改为自启。
     # 运行中随时可手动拉起：supervisorctl start dockerd
     # ==========================================
-    SUPERVISOR_CONF="/etc/supervisor/supervisord.conf"
     if [ "${ENABLE_DOCKERD:-0}" = "1" ]; then
         sed -i '/^\[program:dockerd\]/,/^\[/ s/^autostart=false/autostart=true/' "$SUPERVISOR_CONF"
         echo "==> [DockerD] 开机自启已启用 (ENABLE_DOCKERD=1)"

@@ -99,10 +99,17 @@ jobs:
           CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
           SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
           CLAUDE_CODE_VERSION=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
+          OPEN_DESIGN_VERSION=$(echo "$BODY" | grep -oP 'open-design-version=\K[^\s]+' || true)
 
           if [ -z "$OPENCODE_VERSION" ] || [ -z "$CODE_SERVER_VERSION" ] || [ -z "$CODEX_VERSION" ] || [ -z "$SERENA_VERSION" ] || [ -z "$CLAUDE_CODE_VERSION" ]; then
             echo "Failed to resolve pinned dynamic versions from latest release body" >&2
             exit 1
+          fi
+
+          # Open Design 标记可能在历史 release 中不存在，回退到 Dockerfile 默认版本
+          if [ -z "$OPEN_DESIGN_VERSION" ]; then
+            OPEN_DESIGN_VERSION="0.16.1"
+            echo "Open Design: no pinned version in release body, using default ${OPEN_DESIGN_VERSION}"
           fi
 
           echo "opencode_version=$OPENCODE_VERSION" >> $GITHUB_OUTPUT
@@ -110,6 +117,7 @@ jobs:
           echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
           echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
           echo "claude_code_version=$CLAUDE_CODE_VERSION" >> $GITHUB_OUTPUT
+          echo "open_design_version=$OPEN_DESIGN_VERSION" >> $GITHUB_OUTPUT
 
       - name: Trigger dynamic layer build
         uses: actions/github-script@v8
@@ -125,6 +133,7 @@ jobs:
                 code_server_version: '${{ steps.versions.outputs.code_server_version }}',
                 codex_version: '${{ steps.versions.outputs.codex_version }}',
                 serena_version: '${{ steps.versions.outputs.serena_version }}',
-                claude_code_version: '${{ steps.versions.outputs.claude_code_version }}'
+                claude_code_version: '${{ steps.versions.outputs.claude_code_version }}',
+                open_design_version: '${{ steps.versions.outputs.open_design_version }}'
               }
             });
