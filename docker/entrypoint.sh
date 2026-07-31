@@ -94,7 +94,15 @@ if [ "$(id -u)" = '0' ]; then
     LOCAL_UID=${LOCAL_UID:-10001}
     LOCAL_GID=${LOCAL_GID:-$LOCAL_UID}
 
-    if [ "$(id -u app)" != "$LOCAL_UID" ] || [ "$(id -g app)" != "$LOCAL_GID" ]; then
+    # 当 LOCAL_UID=0 时，app 用户将以 root 权限运行（UID=0），
+    # 挂载目录的属主也是 root，无需 usermod（省去全盘扫描）和 chown（省去递归修改属主）。
+    # 仅需将 app 的 UID/GID 标记为 0，后续 gosu app 即以 root 权限运行。
+    if [ "$LOCAL_UID" = "0" ]; then
+        echo "Running as root (LOCAL_UID=0), skip usermod and chown"
+        if [ "$(id -u app)" != "0" ] || [ "$(id -g app)" != "0" ]; then
+            usermod -o -u 0 -g 0 app
+        fi
+    elif [ "$(id -u app)" != "$LOCAL_UID" ] || [ "$(id -g app)" != "$LOCAL_GID" ]; then
         echo "Adjusting app user to uid=$LOCAL_UID, gid=$LOCAL_GID"
         groupmod -o -g "$LOCAL_GID" app
         usermod -o -u "$LOCAL_UID" -g "$LOCAL_GID" app
@@ -128,7 +136,10 @@ if [ "$(id -u)" = '0' ]; then
     sed -i '/^\[program:open-design\]/,/^\[/ s/^autostart=false/autostart=true/' "$SUPERVISOR_CONF"
     echo "==> [Open Design] 已启用，端口 4098"
 
-    chown -R app:app /home/app /workspace 2>/dev/null || true
+    # 当 LOCAL_UID=0 时，文件属主本身就是 root，无需递归 chown。
+    if [ "$LOCAL_UID" != "0" ]; then
+        chown -R app:app /home/app /workspace 2>/dev/null || true
+    fi
 
     # ==========================================
     # SSH Server 初始化（可选，通过挂载公钥文件启用）
@@ -149,8 +160,9 @@ if [ "$(id -u)" = '0' ]; then
 
         # 强制修正 host key 权限：容器重启或某些挂载场景会导致权限变宽（如 0777），
         # sshd 会拒绝使用过宽权限的私钥，导致公钥认证失效。
-        chmod 600 /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key 2>/dev/null || true
-        chmod 644 /etc/ssh/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_rsa_key.pub 2>/dev/null || true
+        # 覆盖全部可能的 host key 类型，避免 sshd 因 ecdsa/dsa key 权限过宽告警。
+        chmod 600 /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_ecdsa_key /etc/ssh/ssh_host_dsa_key 2>/dev/null || true
+        chmod 644 /etc/ssh/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_rsa_key.pub /etc/ssh/ssh_host_ecdsa_key.pub /etc/ssh/ssh_host_dsa_key.pub 2>/dev/null || true
 
         cat > /etc/ssh/sshd_config.d/opencode.conf <<EOF
 Port 2223
