@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XFCE 桌面（xfdesktop）默认配置
+     壁纸：Fluent 配色 SVG（明色），位于 /usr/share/backgrounds/fluent/
+     图标大小：默认 48px，文字白色描边（深色壁纸可读）
+     单工作区模式：跟随 xfwm4 workspace_count -->
+<channel name="xfce4-desktop" version="1">
+  <property name="backdrop" type="empty">
+    <property name="screen0" type="empty">
+      <property name="monitor0" type="empty">
+        <property name="brightness" type="empty">
+          <!-- 0=未激活，正值调亮，负值调暗。0 让壁纸按原色显示 -->
+          <property name="value1" type="int" value="0"/>
+          <property name="value2" type="int" value="0"/>
+        </property>
+        <property name="image-path" type="string" value="/usr/share/backgrounds/fluent/fluent-wallpaper.svg"/>
+        <property name="image-show" type="bool" value="true"/>
+        <!-- 拉伸模式：scaled（保持比例填充），其他选项 centered/tiled/stretched -->
+        <property name="image-style" type="int" value="3"/>
+        <!-- 颜色填充（拉伸时上下留白处）-->
+        <property name="color-style" type="int" value="0"/>
+        <property name="color1" type="array">
+          <value type="uint" value="16384"/>
+          <value type="uint" value="16384"/>
+          <value type="uint" value="16384"/>
+          <value type="uint" value="65535"/>
+        </property>
+      </property>
+      <property name="monitor1" type="empty">
+        <property name="brightness" type="empty">
+          <property name="value1" type="int" value="0"/>
+          <property name="value2" type="int" value="0"/>
+        </property>
+        <property name="image-path" type="string" value="/usr/share/backgrounds/fluent/fluent-wallpaper.svg"/>
+        <property name="image-show" type="bool" value="true"/>
+        <property name="image-style" type="int" value="3"/>
+        <property name="color-style" type="int" value="0"/>
+        <property name="color1" type="array">
+          <value type="uint" value="16384"/>
+          <value type="uint" value="16384"/>
+          <value type="uint" value="16384"/>
+          <value type="uint" value="65535"/>
+        </property>
+      </property>
+    </property>
+  </property>
+  <property name="desktop-icons" type="empty">
+    <!-- 图标大小 48px（默认），Win11 风格 -->
+    <property name="icon-size" type="uint" value="48"/>
+    <!-- 文字颜色：白色，描边自动 -->
+    <property name="tooltip-size" type="double" value="64.000000"/>
+    <!-- 单击激活（RDP 远程体验更接近 Win）-->
+    <property name="single-click" type="bool" value="false"/>
+    <!-- 显示 Thunar 菜单的"文件管理器"上下文菜单 -->
+    <property name="use-menu" type="bool" value="true"/>
+  </property>
+</channel>

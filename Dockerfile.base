@@ -383,6 +383,22 @@ ARG DEBIAN_FRONTEND=noninteractive
 USER root
 WORKDIR /app
 
+# 解除 node:*-slim 基础镜像的 dpkg path-exclude 规则对 /usr/share/locale/* 的剔除。
+# 该规则由 debian slim 镜像注入（/etc/dpkg/dpkg.cfg.d/docker），会在 apt 安装阶段
+# 直接丢弃所有 .mo 翻译文件，导致即使 LANG=zh_CN.UTF-8 且 xfce4-* 包自带 zh_CN 翻译，
+# 实际文件系统里也没有任何翻译可用——XFCE 桌面、whisker 菜单、xfwm4、thunar、terminal
+# 全部强制显示英文，外部表现就是"装了汉化包但实际全英文"。
+# 这里删除该 dpkg 配置文件中所有 path-exclude /usr/share/locale/* 行，
+# 让后续 apt install xfce4-* 时翻译文件能正常落盘。
+# 同时保留 /usr/share/doc 和 /usr/share/man 的精简（不删，对汉化无关）。
+RUN sed -i '/^path-exclude \/usr\/share\/locale\/\*$/d' /etc/dpkg/dpkg.cfg.d/docker \
+    && if grep -qE '^path-exclude.*/usr/share/locale' /etc/dpkg/dpkg.cfg.d/docker; then \
+         echo "FATAL: /usr/share/locale path-exclude still present after sed" >&2; \
+         exit 1; \
+       else \
+         echo "OK: /usr/share/locale path-exclude removed, translations will be installed"; \
+       fi
+
 # 运行时依赖 + Playwright Chromium 系统库 + Wine（Windows 交叉编译）
 # 启用 non-free 组件，因为 unrar 仅在 non-free 仓库中提供
 # Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
@@ -509,7 +525,9 @@ RUN dpkg --add-architecture i386 \
         # xrdp/xorgxrdp 提供 RDP 协议接入，xfwm4 是 XFCE 默认窗口管理器
         # dbus-x11 + dbus + policykit-1：补齐系统总线，让 polkit/udisks2 正常工作
         # fcitx5 + fcitx5-chinese-addons + gtk3 前端提供中文输入法（XFCE 走 GTK）
-        # papirus-icon-theme：扁平耐看，避免 XFCE 默认 Rodent 主题在低 bpp 下糊
+        # papirus-icon-theme：保留作为兜底图标（Fluent 主题上游失效时降级显示）
+        # fonts-sarasa-gothic：更纱 Gothic，中英文等宽对齐，1cjk=2ascii，终端/编辑器友好
+        # xfce4-notifyd：Fluent 圆角通知需要的通知守护，否则 fcitx5 切换提示丑陋
         xrdp \
         xorgxrdp \
         xfce4 \
@@ -517,6 +535,7 @@ RUN dpkg --add-architecture i386 \
         xfce4-whiskermenu-plugin \
         xfce4-clipman-plugin \
         xfce4-screenshooter \
+        xfce4-notifyd \
         thunar \
         dbus \
         dbus-x11 \
@@ -530,6 +549,57 @@ RUN dpkg --add-architecture i386 \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
 
+# Sarasa Gothic 更纱字体（中英文等宽对齐的现代中文字体）
+# Debian bookworm 仓库版本较旧且只有部分子集，这里直接从 GitHub releases 取最新固定版本。
+# 字体覆盖：Sarasa UI/Mono/Term + 简中（SC），终端、UI、文档全场景适用。
+# 单独成层便于版本升级，约 +60MB。
+ARG SARASA_VERSION=1.0.26
+RUN SARASA_ARCH="$(dpkg --print-architecture)" \
+    && case "${SARASA_ARCH}" in amd64|arm64) ;; *) echo "Unsupported sarasa arch: ${SARASA_ARCH}" >&2; exit 1 ;; esac \
+    && mkdir -p /usr/share/fonts/truetype/sarasa /tmp/sarasa \
+    && curl -fsSL "https://github.com/be5invis/Sarasa-Gothic/releases/download/v${SARASA_VERSION}/Sarasa-TTF-${SARASA_VERSION}.7z" -o /tmp/sarasa/sarasa.7z \
+    && 7z x -y /tmp/sarasa/sarasa.7z -o/tmp/sarasa >/dev/null \
+    # 只保留 SC（简体）子集，避免装全 11 个 cjk 变体撑爆层（200MB+）
+    && mv /tmp/sarasa/Sarasa*SC*.ttf /usr/share/fonts/truetype/sarasa/ \
+    # 校验：若没装上任何字体，立刻失败而非静默通过
+    && if [ -z "$(ls /usr/share/fonts/truetype/sarasa/*.ttf 2>/dev/null)" ]; then \
+         echo "FATAL: no Sarasa SC ttf installed; release asset layout may have changed" >&2; \
+         exit 1; \
+       fi \
+    && rm -rf /tmp/sarasa \
+    && fc-cache -f /usr/share/fonts/truetype/sarasa \
+    && echo "==> Sarasa 字体已安装: $(ls /usr/share/fonts/truetype/sarasa/ | wc -l) files"
+
+# Fluent GTK 主题（vinceliuice/Fluent-gtk-theme，Win11 风格）
+# 参考项目 tiny_container 默认主题。包含深浅色变体、xfwm4 窗口边框、GTK3/GTK4 资源。
+# 仓库无 release tag，按 commit 拉取（约 +30MB）。
+RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-gtk-theme.git /tmp/fluent-gtk \
+    && cd /tmp/fluent-gtk \
+    # 安装到 /usr/share/themes（系统级），-t all 安装所有 accent 变体
+    && bash install.sh -t all -d /usr/share/themes \
+    # 校验核心主题目录确实生成（Fluent-Dark 是 xfwm4.xml 引用的主题名）
+    && if [ ! -d /usr/share/themes/Fluent-Dark ]; then \
+         echo "FATAL: /usr/share/themes/Fluent-Dark missing; install.sh layout may have changed" >&2; \
+         ls /usr/share/themes/ | head -20 >&2; \
+         exit 1; \
+       fi \
+    && rm -rf /tmp/fluent-gtk \
+    && echo "==> Fluent GTK 主题已安装"
+
+# Fluent 图标主题（vinceliuice/Fluent-icon-theme，与 GTK 主题配套）
+# 含深浅色圆角图标，约 +100MB。
+RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-icon-theme.git /tmp/fluent-icon \
+    && cd /tmp/fluent-icon \
+    && bash install.sh -d /usr/share/icons \
+    # 校验图标主题索引确实生成
+    && if [ ! -f /usr/share/icons/Fluent/index.theme ]; then \
+         echo "FATAL: /usr/share/icons/Fluent/index.theme missing" >&2; \
+         ls /usr/share/icons/ | head -20 >&2; \
+         exit 1; \
+       fi \
+    && rm -rf /tmp/fluent-icon \
+    && echo "==> Fluent 图标主题已安装"
+
 # Docker CE（DinD 模式）
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
@@ -540,11 +610,14 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
 
 # xrdp 配置
 # - xrdp.ini: 端口改为 3390（避免与宿主机 RDP 默认 3389 冲突），
-#             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用
+#             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用，
+#             登录窗口背景色对齐 Fluent 主题（ls_top_window_bg_color=0067c0）
 # - startwm.sh: 启动 dbus 会话总线 + fcitx5 中文输入法 + XFCE4 会话
 #   通过 COPY docker/xrdp-startwm.sh 注入（见文件末尾 COPY 块）
-# - xsettings.xml: XFCE 默认图标主题设为 Papirus
-#   通过 COPY docker/xfce-xsettings.xml 注入（见文件末尾 COPY 块）
+# - xsettings.xml: GTK/图标主题设为 Fluent，字体设为 Sarasa UI SC
+# - xfwm4.xml: 窗口管理器主题设为 Fluent-Dark，按钮布局对齐 Win11
+# - xfce-desktop.xml: 默认壁纸设为 Fluent 配色 SVG
+#   三个 xfconf 文件均通过文件末尾 COPY 块注入
 # 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
 # 注意：不要在 RUN 里用 `cmd1 && cmd2 <<EOF ... EOF` 这种"复合命令 + shell heredoc"形式，
 #       BuildKit 的 Dockerfile 解析器会把 heredoc 后续行当成新 Dockerfile 指令报
@@ -555,7 +628,16 @@ RUN sed -i \
     -e 's/^crypt_level=high/crypt_level=client/' \
     -e 's/^bitmap_cache=true/bitmap_cache=false/' \
     -e 's/^#\?tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' \
-    /etc/xrdp/xrdp.ini
+    /etc/xrdp/xrdp.ini \
+    # 登录窗口配色对齐 Fluent 主题（深色 #0067c0 / accent #198ee6），
+    # 默认 xrdp 是 90 年代蓝（#000000 顶 + #003366 横条），与 Fluent 桌面割裂。
+    # 值来源：xrdp wiki Login Authentication Window 章节配置项。
+    && sed -i \
+        -e 's/^#\?ls_top_window_bg_color=.*/ls_top_window_bg_color=0067c0/' \
+        -e 's/^#\?ls_bg_color=.*/ls_bg_color=f0f4f9/' \
+        -e 's/^#\?ls_logo_filename=.*/ls_logo_filename=/' \
+        /etc/xrdp/xrdp.ini \
+    && echo "==> xrdp 登录界面配色已对齐 Fluent"
 
 # 创建架构无关的 JAVA_HOME 符号链接（JDK 17 + JDK 21 共存，默认 21）
 # UnifyNook Android 要求 sourceCompatibility VERSION_21，默认指向 JDK 21
@@ -617,7 +699,16 @@ COPY base/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
 # xrdp + XFCE4 启动脚本和默认配置（不走 RUN heredoc 是为了避免 BuildKit
 # 解析器把"复合命令 + shell heredoc"中的 heredoc 内容误判为 Dockerfile 指令）
 COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
+# Fluent 桌面默认配置：
+# - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
+# - xfce-desktop.xml：默认壁纸路径
+# - xfwm4.xml：窗口管理器主题、标题按钮布局
 COPY docker/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+COPY docker/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+COPY docker/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+# Fluent 壁纸（明/暗），xfdesktop 通过 librsvg 直接渲染 SVG
+COPY docker/desktop-fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
+COPY docker/desktop-fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /etc/xrdp/startwm.sh
 
 WORKDIR /workspace

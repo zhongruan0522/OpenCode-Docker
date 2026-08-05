@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XFCE xfwm4 窗口管理器默认配置
+     主题：Fluent-Dark（与 GTK 主题配套，含标题栏素材）
+     按钮布局：menu:minimize,maximize,close（Win11 顺序）
+     标题字体：Sarasa UI SC 9 加粗 -->
+<channel name="xfwm4" version="1">
+  <property name="general" type="empty">
+    <property name="theme" type="string" value="Fluent-Dark"/>
+    <property name="button_layout" type="string" value="CMH|"/>
+    <!-- C=close M=maximize H=minimize | 后是右侧；Win11 标准布局 -->
+    <property name="title_font" type="string" value="Sarasa UI SC SemiBold 9"/>
+    <!-- 焦点跟随鼠标关闭（RDP 远程默认点击聚焦更符合习惯）-->
+    <property name="click_to_focus" type="bool" value="true"/>
+    <property name="focus_new" type="bool" value="true"/>
+    <property name="raise_on_click" type="bool" value="true"/>
+    <!-- 捕获移动时实时显示（RDP 带宽 OK 时体验好）-->
+    <property name="box_move" type="bool" value="false"/>
+    <property name="box_resize" type="bool" value="false"/>
+    <!-- 双击最大化高度（仅垂直），Win11 也是默认全屏最大化 -->
+    <property name="double_click_action" type="string" value="maximize"/>
+    <!-- 滚动不透明度关闭，避免误操作 -->
+    <property name="scroll_workspaces" type="bool" value="false"/>
+    <!-- 工作区数量 2（默认 4 太多，RDP 单屏一般够用）-->
+    <property name="workspace_count" type="int" value="2"/>
+  </property>
+</channel>

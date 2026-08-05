@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fluent 风格抽象壁纸（Win11 配色）
+     纯 CSS 渐变 + 抽象 ribbon，无需外部素材。
+     颜色取自 vinceliuice/Fluent-gtk-theme 默认 accent：#198ee6 / #0067c0
+     xfdesktop 支持 SVG 直接渲染（librsvg）。 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a1e3a"/>
+      <stop offset="50%" stop-color="#0e2a55"/>
+      <stop offset="100%" stop-color="#00529c"/>
+    </linearGradient>
+    <linearGradient id="ribbon1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#198ee6" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#36c5f0" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="ribbon2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0067c0" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#198ee6" stop-opacity="0.25"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.7" cy="0.35" r="0.6">
+      <stop offset="0%" stop-color="#36c5f0" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#36c5f0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#glow)"/>
+  <!-- 抽象 ribbon：仿 Win11 Bloom 抽象花形，简化为流光带 -->
+  <path d="M -200 750 Q 480 500 960 600 T 2120 450 L 2120 1080 L -200 1080 Z"
+        fill="url(#ribbon1)"/>
+  <path d="M -200 900 Q 400 700 960 800 T 2120 700 L 2120 1080 L -200 1080 Z"
+        fill="url(#ribbon2)"/>
+  <!-- 中央光晕"花瓣" -->
+  <g transform="translate(960 540)" opacity="0.85">
+    <ellipse cx="0" cy="0" rx="380" ry="380" fill="#198ee6" opacity="0.12"/>
+    <ellipse cx="0" cy="0" rx="220" ry="220" fill="#36c5f0" opacity="0.18"/>
+    <path d="M 0 -180 Q 120 -60 0 180 Q -120 60 0 -180 Z" fill="#9fd8ff" opacity="0.35"/>
+    <path d="M 0 -180 Q -120 -60 0 180 Q 120 60 0 -180 Z" fill="#198ee6" opacity="0.45"/>
+  </g>
+</svg>

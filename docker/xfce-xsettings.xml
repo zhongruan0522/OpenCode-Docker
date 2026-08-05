@@ -1,7 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- XFCE xsettings 默认配置：GTK 主题、图标、字体、字体渲染
+     主题：Fluent（vinceliuice/Fluent-gtk-theme，Win11 风格）
+     图标：Fluent（vinceliuice/Fluent-icon-theme）
+     字体：Sarasa UI SC（中英文等宽对齐，终端/编辑器友好）
+     渲染：次像素 RGB + 轻微 Hinting，提升 RDP 远程显示清晰度 -->
 <channel name="xsettings" version="1">
   <property name="Gtk" type="empty">
-    <property name="IconThemeName" type="string" value="Papirus"/>
+    <property name="ThemeName" type="string" value="Fluent-Dark"/>
+    <property name="IconThemeName" type="string" value="Fluent"/>
+    <property name="FontName" type="string" value="Sarasa UI SC 10"/>
+    <property name="MonospaceFontName" type="string" value="Sarasa Mono SC 11"/>
     <property name="CursorThemeName" type="string" value="default"/>
+    <property name="ToolbarStyle" type="int" value="2"/>
+    <property name="ToolbarIconSize" type="int" value="1"/>
+    <property name="MenuImages" type="bool" value="true"/>
+    <property name="ButtonImages" type="bool" value="true"/>
+    <property name="DecorationLayout" type="string" value="menu:minimize,maximize,close"/>
+    <property name="Gtk3-emoji-support" type="bool" value="true"/>
+    <property name="ShellShowsAppIcons" type="bool" value="true"/>
+    <!-- 启用暗色偏好（Fluent-Dark），GTK libadwaita 应用会跟随 -->
+    <property name="ApplicationPreferDarkTheme" type="bool" value="true"/>
+  </property>
+  <property name="Xft" type="empty">
+    <!-- DPI：96 是 xrdp 默认，与 Win11 一致 -->
+    <property name="DPI" type="int" value="96"/>
+    <!-- AntiAlias：1=开启，远程桌面强烈建议开 -->
+    <property name="Antialias" type="int" value="1"/>
+    <!-- Hinting：1=轻微，0=无，2=中，3=满；RDP 下 1 综合最佳 -->
+    <property name="Hinting" type="int" value="1"/>
+    <!-- HintStyle：hintslight（轻微 hinting 对应 Subpixel）-->
+    <property name="HintStyle" type="string" value="hintslight"/>
+    <!-- RGBA：次像素 RGB 排列，提升 RDP 下文字锐度 -->
+    <property name="RGBA" type="string" value="rgb"/>
+  </property>
+  <property name="Net" type="empty">
+    <!-- 双击间隔 250ms（默认 300，RDP 远程操作稍敏感一点更顺手）-->
+    <property name="DoubleClickTime" type="int" value="250"/>
+    <!-- Dnd 拖拽阈值 5px（默认 8）-->
+    <property name="DndDragThreshold" type="int" value="5"/>
   </property>
 </channel>
