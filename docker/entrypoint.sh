@@ -95,12 +95,22 @@ if [ "$(id -u)" = '0' ]; then
     LOCAL_GID=${LOCAL_GID:-$LOCAL_UID}
 
     # 当 LOCAL_UID=0 时，app 用户将以 root 权限运行（UID=0），
-    # 挂载目录的属主也是 root，无需 usermod（省去全盘扫描）和 chown（省去递归修改属主）。
-    # 仅需将 app 的 UID/GID 标记为 0，后续 gosu app 即以 root 权限运行。
+    # 挂载目录的属主也是 root，无需递归 chown。
+    # 注意：不能用 usermod -o -u 0 -g 0 app —— usermod -u 会递归遍历 /home/app
+    # 逐个 chown 旧属主文件（/home/app 下挂载了 .cursor-server/.local/.cache 等
+    # 数 G 数据），首次启动耗时可达数分钟，导致 healthcheck 在 supervisord 启动前
+    # 就判容器 unhealthy。这里直接改 /etc/passwd、/etc/group 的账户元数据即可，
+    # gosu app 只读 passwd 的 UID 字段决定降权目标，等价但不触发文件遍历。
     if [ "$LOCAL_UID" = "0" ]; then
-        echo "Running as root (LOCAL_UID=0), skip usermod and chown"
+        echo "Running as root (LOCAL_UID=0), patching /etc/passwd and /etc/group (no file scan)"
         if [ "$(id -u app)" != "0" ] || [ "$(id -g app)" != "0" ]; then
-            usermod -o -u 0 -g 0 app
+            sed -i 's/^\(app:[^:]*:\)[0-9]*:[0-9]*:/\10:0:/' /etc/passwd
+            sed -i 's/^\(app:[^:]*:\)[0-9]*:/\10:/' /etc/group
+            # 校验：失败必须立即暴露，否则 gosu app 会以错误身份运行
+            if [ "$(id -u app)" != "0" ] || [ "$(id -g app)" != "0" ]; then
+                echo "FATAL: failed to set app uid/gid to 0 (passwd=$(getent passwd app))" >&2
+                exit 1
+            fi
         fi
     elif [ "$(id -u app)" != "$LOCAL_UID" ] || [ "$(id -g app)" != "$LOCAL_GID" ]; then
         echo "Adjusting app user to uid=$LOCAL_UID, gid=$LOCAL_GID"
