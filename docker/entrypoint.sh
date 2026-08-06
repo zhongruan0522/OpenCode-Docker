@@ -30,10 +30,12 @@ fi
 # ==========================================
 if [ "${ENABLE_WARP:-0}" = "1" ]; then
     WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
-    /usr/local/bin/init-warp.sh
-
-    export SOCKS5_PROXY="socks5://127.0.0.1:${WARP_SOCKS_PORT}"
-    echo "==> [WARP] 环境变量已注入: SOCKS5_PROXY=${SOCKS5_PROXY}"
+    if /usr/local/bin/init-warp.sh; then
+        export SOCKS5_PROXY="socks5://127.0.0.1:${WARP_SOCKS_PORT}"
+        echo "==> [WARP] 环境变量已注入: SOCKS5_PROXY=${SOCKS5_PROXY}"
+    else
+        echo "==> [WARP] WARNING: MicroWARP 初始化失败，跳过代理注入并继续启动主服务" >&2
+    fi
 else
     echo "==> [WARP] MicroWARP 未启用 (设置 ENABLE_WARP=1 以启用)"
 fi
@@ -43,11 +45,17 @@ fi
 # ==========================================
 if [ -n "$GITHUB_TOKEN" ]; then
     echo "Configuring GitHub CLI with provided token..."
+    GITHUB_AUTH_TIMEOUT="${GITHUB_AUTH_TIMEOUT:-20s}"
     mkdir -p /home/app/.config/gh
-    echo "$GITHUB_TOKEN" | gh auth login --with-token 2>/dev/null \
-        && gh auth setup-git 2>/dev/null \
-        && echo "GitHub login success." \
-        || echo "GitHub login failed."
+    if echo "$GITHUB_TOKEN" | timeout "$GITHUB_AUTH_TIMEOUT" gh auth login --with-token >/dev/null 2>&1; then
+        if timeout "$GITHUB_AUTH_TIMEOUT" gh auth setup-git >/dev/null 2>&1; then
+            echo "GitHub login success."
+        else
+            echo "GitHub login success, but gh auth setup-git failed or timed out after ${GITHUB_AUTH_TIMEOUT}."
+        fi
+    else
+        echo "GitHub login failed or timed out after ${GITHUB_AUTH_TIMEOUT}."
+    fi
 fi
 
 if [ -n "$GITHUB_SSH_KEY" ]; then
@@ -55,7 +63,10 @@ if [ -n "$GITHUB_SSH_KEY" ]; then
     mkdir -p /home/app/.ssh
     echo "$GITHUB_SSH_KEY" | base64 -d > /home/app/.ssh/id_rsa
     chmod 600 /home/app/.ssh/id_rsa
-    ssh-keyscan github.com >> /home/app/.ssh/known_hosts 2>/dev/null
+    GITHUB_SSH_KEYSCAN_TIMEOUT="${GITHUB_SSH_KEYSCAN_TIMEOUT:-10s}"
+    if ! timeout "$GITHUB_SSH_KEYSCAN_TIMEOUT" ssh-keyscan github.com >> /home/app/.ssh/known_hosts 2>/dev/null; then
+        echo "GitHub SSH known_hosts scan failed or timed out after ${GITHUB_SSH_KEYSCAN_TIMEOUT}; continuing startup." >&2
+    fi
     chown -R app:app /home/app/.ssh
     echo "GitHub SSH key configured."
 fi
@@ -140,10 +151,53 @@ if [ "$(id -u)" = '0' ]; then
         echo "==> [Open Design] 使用用户提供的 API Token"
     fi
     chown -R app:app /opt/open-design/.od
-    # 将 token 追加到 [program:open-design] 的 environment 行（& 表示整段匹配文本）
-    sed -i "s|^environment=HOME=\"/home/app\",USER=\"app\",SHELL=\"/bin/bash\",NODE_ENV=\"production\",NODE_OPTIONS=\"--max-old-space-size=192\",OD_BIND_HOST=\"0.0.0.0\",OD_PORT=\"4098\",OD_DATA_DIR=\"/opt/open-design/.od\"$|&,OD_API_TOKEN=\"${OD_API_TOKEN}\"|" "$SUPERVISOR_CONF"
-    # 只启用 open-design 的自启（用区段限定，避免误改 dockerd 的 autostart=false）
-    sed -i '/^\[program:open-design\]/,/^\[/ s/^autostart=false/autostart=true/' "$SUPERVISOR_CONF"
+
+    configure_open_design_supervisor() {
+        local supervisor_config_path="$1"
+        local open_design_api_token="$2"
+        local escaped_open_design_api_token
+        local open_design_environment_line
+        local temporary_supervisor_config_path
+
+        escaped_open_design_api_token="$(printf '%s' "$open_design_api_token" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+        open_design_environment_line="environment=HOME=\"/home/app\",USER=\"app\",SHELL=\"/bin/bash\",NODE_ENV=\"production\",NODE_OPTIONS=\"--max-old-space-size=384\",OD_BIND_HOST=\"0.0.0.0\",OD_PORT=\"4098\",OD_DATA_DIR=\"/opt/open-design/.od\",OD_API_TOKEN=\"${escaped_open_design_api_token}\""
+        temporary_supervisor_config_path="${supervisor_config_path}.tmp"
+
+        if awk -v environment_line="$open_design_environment_line" '
+            /^\[program:open-design\]$/ {
+                inside_open_design_program = 1
+                print
+                next
+            }
+            inside_open_design_program && /^\[/ {
+                inside_open_design_program = 0
+            }
+            inside_open_design_program && /^environment=/ {
+                print environment_line
+                replaced_environment = 1
+                next
+            }
+            inside_open_design_program && /^autostart=/ {
+                print "autostart=true"
+                replaced_autostart = 1
+                next
+            }
+            { print }
+            END {
+                if (!replaced_environment || !replaced_autostart) {
+                    exit 42
+                }
+            }
+        ' "$supervisor_config_path" > "$temporary_supervisor_config_path"; then
+            mv "$temporary_supervisor_config_path" "$supervisor_config_path"
+        else
+            rm -f "$temporary_supervisor_config_path"
+            echo "FATAL: failed to configure [program:open-design] in ${supervisor_config_path}" >&2
+            exit 1
+        fi
+    }
+
+    configure_open_design_supervisor "$SUPERVISOR_CONF" "$OD_API_TOKEN"
     echo "==> [Open Design] 已启用，端口 4098"
 
     # 当 LOCAL_UID=0 时，文件属主本身就是 root，无需递归 chown。
