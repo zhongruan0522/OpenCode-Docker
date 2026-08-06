@@ -105,12 +105,6 @@ services:
       # === Open Design 数据目录（设计文件、会话、配置）===
       - ./app-config/open-design:/opt/open-design/.od:rshared
 
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
-      interval: 30s
-      timeout: 5s
-      start_period: 15s
-      retries: 3
     networks:
       - 1panel-network
     restart: unless-stopped
