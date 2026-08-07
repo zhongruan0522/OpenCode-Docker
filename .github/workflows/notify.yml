@@ -65,14 +65,18 @@ jobs:
         run: |
           set -euo pipefail
           # 用 jq 解析 token，避免明文打印到日志
-          TOKEN=$(curl -fsSL -X POST \
+          # 不使用 -f：飞书鉴权失败返回 HTTP 400 + JSON body，需要读取 code/msg 定位根因
+          TOKEN=$(curl -sS -X POST \
             -H 'Content-Type: application/json' \
             -d "{\"app_id\":\"${APP_ID}\",\"app_secret\":\"${APP_SECRET}\"}" \
             https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal \
-            | jq -r '.tenant_access_token // empty')
+            -o token_response.json; \
+            jq -r '.tenant_access_token // empty' token_response.json)
 
           if [ -z "$TOKEN" ]; then
-            echo "Failed to fetch tenant_access_token" >&2
+            CODE=$(jq -r '.code // empty' token_response.json)
+            MSG=$(jq -r '.msg // empty' token_response.json)
+            echo "Failed to fetch tenant_access_token. code=${CODE}, msg=${MSG}" >&2
             exit 1
           fi
 
@@ -123,16 +127,21 @@ jobs:
 
           # receive_id_type 必须作为 query param 传递
           # 不打印 PAYLOAD，直接通过管道投递，避免 user_id 等出现在日志
-          echo "$PAYLOAD" | curl -fsSL -X POST \
+          # 不使用 -f：飞书业务错误（如卡片变量不匹配）会返回 HTTP 400 + JSON body，
+          # curl -f 会把这种情况当成传输错误吞掉响应体，导致无法定位真实原因。
+          # 改用 -sS：静默 curl 自身进度，但仍显示传输层错误；HTTP 4xx/5xx 一律落盘
+          echo "$PAYLOAD" | curl -sS -X POST \
             -H 'Content-Type: application/json; charset=utf-8' \
             -H "Authorization: Bearer ${TOKEN}" \
             --data-binary @- \
             "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=user_id" \
             -o response.json
 
-          # 仅校验 code，不回显原始响应体（可能含 token / receive_id）
+          # 仅提取 code 和 msg 用于诊断，不回显原始响应体（理论上不含 token/receive_id，
+          # 但保守起见只打印业务字段，避免任何可能的字段意外泄露）
           CODE=$(jq -r '.code // empty' response.json)
+          MSG=$(jq -r '.msg // empty' response.json)
           if [ "$CODE" != "0" ]; then
-            echo "Feishu API returned non-zero code: ${CODE}" >&2
+            echo "Feishu API returned non-zero code: ${CODE}, msg: ${MSG}" >&2
             exit 1
           fi
