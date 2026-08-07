@@ -33,8 +33,8 @@ services:
       # Playwright
       - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright # Playwright 浏览器缓存目录，使用 base 镜像预装的 Chromium
       - PLAYWRIGHT_MCP_HEADLESS=1 # Playwright MCP 默认无头模式运行
-      - PLAYWRIGHT_MCP_BROWSER=chromium # Playwright MCP 默认浏览器类型
-      - PLAYWRIGHT_MCP_NO_SANDBOX=1 # 容器内 Chromium 禁用 sandbox，避免权限问题
+      - PLAYWRIGHT_MCP_BROWSER=chrome # Playwright MCP 浏览器，chrome=系统 Chrome Stable（日常浏览同一份），chromium=Playwright bundled
+      - PLAYWRIGHT_MCP_SANDBOX=0 # 容器内 Chrome 禁用 sandbox，避免权限问题（Playwright 源码只读 SANDBOX，NO_SANDBOX 是死变量）
       # UID/GID
       - LOCAL_UID=${LOCAL_UID:-10001} # 启动时把 app 用户调整为宿主期望 UID，减少挂载文件权限问题
       - LOCAL_GID=${LOCAL_GID:-10001} # 启动时把 app 用户调整为宿主期望 GID
@@ -48,9 +48,11 @@ services:
       - GH_PROXY=${GH_PROXY:-} # GitHub 访问代理覆盖值，供 init-warp 或相关脚本使用
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-} # 需要绕过 WARP 的 Tailscale 网段
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-} # 额外绕过 WARP 的 CIDR 列表
-      # 远程桌面 (xrdp + LXQt)
+      # 远程桌面 (xrdp + XFCE4)
       - ENABLE_DESKTOP=${ENABLE_DESKTOP:-1} # 是否启用 xrdp 远程桌面，默认启用，端口 3390
-      - DESKTOP_PASSWORD=${DESKTOP_PASSWORD:-app} # RDP 登录密码（用户名 app），建议改为强密码
+      - DESKTOP_PASSWORD=${DESKTOP_PASSWORD:-app} # app 用户 RDP 登录密码（仅 ALLOW_APP_DESKTOP=1 时生效），建议改为强密码
+      - DESKTOP_USER_PASSWORD=${DESKTOP_USER_PASSWORD:-} # desktop 用户 RDP 登录密码，留空则复用 DESKTOP_PASSWORD，两者都空则无密码登录
+      - ALLOW_APP_DESKTOP=${ALLOW_APP_DESKTOP:-1} # 是否允许 app 用户桌面登录，1=允许（默认，向后兼容），0=禁用（仅 desktop 可登录）
       # DinD
       - ENABLE_DOCKERD=${ENABLE_DOCKERD:-0} # 是否开机自启 DinD dockerd，默认关闭以节省内存。运行中可 supervisorctl start dockerd 手动拉起
     ulimits:

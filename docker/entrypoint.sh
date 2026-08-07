@@ -87,8 +87,8 @@ export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current
 export GRADLE_HOME=/opt/gradle-9.0.0
 export PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
 export PLAYWRIGHT_MCP_HEADLESS=1
-export PLAYWRIGHT_MCP_BROWSER=chromium
-export PLAYWRIGHT_MCP_NO_SANDBOX=1
+export PLAYWRIGHT_MCP_BROWSER=chrome
+export PLAYWRIGHT_MCP_SANDBOX=0
 export ELECTRON_CACHE=/opt/electron-cache
 export LANG=zh_CN.UTF-8
 export LANGUAGE=zh_CN:zh
@@ -262,21 +262,55 @@ EOF
     # 同时手动拉起系统 D-Bus（xfce4-polkit / udisks2 / Thunar 挂载都依赖它）
     # 默认桌面：XFCE4（xfwm4 窗口管理器 + xfce4-panel 任务栏 + xfdesktop 桌面图标）
     # 中文输入法：fcitx5；端口：3390
-    # 登录凭据：与 SSH 共用 app 用户，密码通过 DESKTOP_PASSWORD 环境变量设置（默认 "app"）
+    # 登录用户：
+    #   - desktop（默认推荐）：独立普通权限账号，可 sudo。密码优先级：
+    #       DESKTOP_USER_PASSWORD > DESKTOP_PASSWORD（复用）> 都空则无密码登录
+    #   - app（可选，权限较高）：由 ALLOW_APP_DESKTOP 控制（1 允许 / 0 禁用），默认 1 保持向后兼容
+    #     密码通过 DESKTOP_PASSWORD 设置（默认 "app"）
     # ==========================================
     if [ "${ENABLE_DESKTOP:-1}" = "1" ]; then
         echo "==> [Desktop] 初始化 xrdp + XFCE4 远程桌面..."
 
-        # 设置 app 用户的 RDP 登录密码
-        DESKTOP_PASSWORD="${DESKTOP_PASSWORD:-app}"
-        echo "app:${DESKTOP_PASSWORD}" | chpasswd
-
-        # 创建 app 用户的 .xsession 文件，xrdp 通过它判断启动哪个桌面
-        cat > /home/app/.xsession <<'XSESSION_EOF'
+        # 创建一个通用的 xsession 启动脚本，供两个用户共用
+        install_xsession() {
+            local target_home="$1"
+            local target_user="$2"
+            cat > "${target_home}/.xsession" <<'XSESSION_EOF'
 exec startxfce4
 XSESSION_EOF
-        chown app:app /home/app/.xsession
-        chmod 644 /home/app/.xsession
+            chown "${target_user}:${target_user}" "${target_home}/.xsession"
+            chmod 644 "${target_home}/.xsession"
+        }
+
+        # --- desktop 用户（默认推荐登录账号）---
+        # 密码优先级：DESKTOP_USER_PASSWORD > DESKTOP_PASSWORD > 无密码
+        # 无密码时用 passwd -d 删除密码（xrdp + PAM 允许空密码登录）。
+        if [ -n "${DESKTOP_USER_PASSWORD:-}" ]; then
+            echo "desktop:${DESKTOP_USER_PASSWORD}" | chpasswd
+            echo "==> [Desktop] desktop 用户密码来源：DESKTOP_USER_PASSWORD"
+        elif [ -n "${DESKTOP_PASSWORD:-}" ]; then
+            echo "desktop:${DESKTOP_PASSWORD}" | chpasswd
+            echo "==> [Desktop] desktop 用户密码来源：DESKTOP_PASSWORD（复用）"
+        else
+            # passwd -d 删除密码即"无密码"，xrdp-sesman 的 [Globals] seccrypt=... 默认允许空密码
+            passwd -d desktop >/dev/null 2>&1 || echo "==> [Desktop] WARNING: 清除 desktop 密码失败，沿用镜像占位密码"
+            echo "==> [Desktop] desktop 用户无密码登录（DESKTOP_USER_PASSWORD/DESKTOP_PASSWORD 均未设置）"
+        fi
+        install_xsession /home/desktop desktop
+
+        # --- app 用户（可选，由 ALLOW_APP_DESKTOP 控制）---
+        # ALLOW_APP_DESKTOP 默认 "1" 保持向后兼容；设为 "0" 则用 usermod 锁定账号拒绝 xrdp 登录。
+        if [ "${ALLOW_APP_DESKTOP:-1}" = "1" ]; then
+            DESKTOP_PASSWORD="${DESKTOP_PASSWORD:-app}"
+            echo "app:${DESKTOP_PASSWORD}" | chpasswd
+            install_xsession /home/app app
+            echo "==> [Desktop] app 用户允许桌面登录（ALLOW_APP_DESKTOP=1）"
+        else
+            # -L 锁定密码字段，-s /usr/sbin/nologin 拒绝会话；双重保险阻断 xrdp 登录
+            usermod -L app 2>/dev/null || true
+            rm -f /home/app/.xsession
+            echo "==> [Desktop] app 用户桌面登录已禁用（ALLOW_APP_DESKTOP=0）"
+        fi
 
         # 启动系统 D-Bus（容器内无 systemd 不会自动起）
         # 解决 XFCE 下 polkit / udisks2 / Thunar 挂载 / 网络管理器等组件的 "Not connected to D-Bus server"
@@ -308,8 +342,9 @@ XSESSION_EOF
         # xrdp-sesman/xrdp 以 daemon 模式运行（默认行为），立即返回 0
         xrdp-sesman
         xrdp
-        echo "==> [Desktop] xrdp 已启动，端口 3390，用户 app，登录密码由 DESKTOP_PASSWORD 提供"
+        echo "==> [Desktop] xrdp 已启动，端口 3390"
         echo "==> [Desktop] RDP 客户端连接：localhost:3390（或宿主机映射端口）"
+        echo "==> [Desktop] 默认登录用户：desktop（普通权限，可 sudo）；app 桌面登录：ALLOW_APP_DESKTOP=${ALLOW_APP_DESKTOP:-1}"
     else
         echo "==> [Desktop] 远程桌面已禁用 (ENABLE_DESKTOP=${ENABLE_DESKTOP})"
     fi
