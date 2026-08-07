@@ -50,7 +50,8 @@ jobs:
           esac
 
           # 3. 构建完成时间转北京时间
-          TIME_BJ=$(TZ='Asia/Shanghai' date -d "$UPDATED_AT" '+%Y-%m-%d %H:%M:%S')
+          # 卡片模板 Time 变量声明为 DateTime 类型，固定格式 yyyy-MM-dd HH:mm（不带秒）
+          TIME_BJ=$(TZ='Asia/Shanghai' date -d "$UPDATED_AT" '+%Y-%m-%d %H:%M')
           echo "time=${TIME_BJ}" >> $GITHUB_OUTPUT
 
           # 4. 透传工作流名与仓库名
