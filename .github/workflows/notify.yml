@@ -1,0 +1,138 @@
+name: Notify Feishu
+
+# 监听构建类工作流完成事件。仅 default branch (main) 触发，可正常读取仓库 secrets。
+# 注意：PR 触发的上游构建不会派发 workflow_run 事件，这是 GHA 的安全限制，符合预期。
+on:
+  workflow_run:
+    workflows:
+      - Build Base Image
+      - Build and Push Docker Image
+    types:
+      - completed
+
+jobs:
+  notify:
+    # 上游被跳过/取消时不通知，避免噪音
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+
+    steps:
+      - name: Resolve notification context
+        id: ctx
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          REPO: ${{ github.repository }}
+          # updated_at 为上游工作流完成时间（UTC ISO），转成北京时间可读格式
+          UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          # 1. 根据构建结论选择卡片模板
+          if [ "$CONCLUSION" = "success" ]; then
+            echo "template_id=AAqv2e8wrOFTm" >> $GITHUB_OUTPUT
+          else
+            echo "template_id=AAqv27Co32Y8H" >> $GITHUB_OUTPUT
+          fi
+
+          # 2. 根据工作流名称映射镜像层（Branch 变量语义为镜像层，非 git 分支）
+          case "$WF_NAME" in
+            "Build Base Image")
+              echo "layer=Base" >> $GITHUB_OUTPUT
+              ;;
+            "Build and Push Docker Image")
+              echo "layer=动态" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "Unmapped workflow name for layer: $WF_NAME" >&2
+              exit 1
+              ;;
+          esac
+
+          # 3. 构建完成时间转北京时间
+          TIME_BJ=$(TZ='Asia/Shanghai' date -d "$UPDATED_AT" '+%Y-%m-%d %H:%M:%S')
+          echo "time=${TIME_BJ}" >> $GITHUB_OUTPUT
+
+          # 4. 透传工作流名与仓库名
+          echo "wf_name=${WF_NAME}" >> $GITHUB_OUTPUT
+          echo "project_name=${REPO}" >> $GITHUB_OUTPUT
+
+      - name: Fetch Feishu tenant access token
+        id: token
+        env:
+          APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        run: |
+          set -euo pipefail
+          # 用 jq 解析 token，避免明文打印到日志
+          TOKEN=$(curl -fsSL -X POST \
+            -H 'Content-Type: application/json' \
+            -d "{\"app_id\":\"${APP_ID}\",\"app_secret\":\"${APP_SECRET}\"}" \
+            https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal \
+            | jq -r '.tenant_access_token // empty')
+
+          if [ -z "$TOKEN" ]; then
+            echo "Failed to fetch tenant_access_token" >&2
+            exit 1
+          fi
+
+          # 必须用 ::add-mask:: 指令本身携带值，GHA 会在打印前完成 mask；
+          # 若先 echo 再 mask，token 会在 masking 生效前泄露到日志。
+          echo "::add-mask::${TOKEN}"
+          echo "value=${TOKEN}" >> $GITHUB_OUTPUT
+
+      - name: Send interactive card
+        env:
+          TOKEN: ${{ steps.token.outputs.value }}
+          USER_ID: ${{ secrets.FEISHU_USER_ID }}
+          TEMPLATE_ID: ${{ steps.ctx.outputs.template_id }}
+          PROJECT_NAME: ${{ steps.ctx.outputs.project_name }}
+          LAYER: ${{ steps.ctx.outputs.layer }}
+          TIME: ${{ steps.ctx.outputs.time }}
+          ACTIONS_NAME: ${{ steps.ctx.outputs.wf_name }}
+        run: |
+          set -euo pipefail
+
+          # 飞书模板卡片 content 字段需要是序列化后的 JSON 字符串
+          # 仅传模板约定的四个变量：Project_Name / Branch / Time / Actions_name
+          CONTENT=$(jq -nc \
+            --arg template_id "$TEMPLATE_ID" \
+            --arg project_name "$PROJECT_NAME" \
+            --arg branch "$LAYER" \
+            --arg time "$TIME" \
+            --arg actions_name "$ACTIONS_NAME" \
+            '{
+              type: "template",
+              data: {
+                template_id: $template_id,
+                template_version_name: "1.0.4",
+                template_variable: {
+                  Project_Name: $project_name,
+                  Branch: $branch,
+                  Time: $time,
+                  Actions_name: $actions_name
+                }
+              }
+            }')
+
+          # 将 content 字符串塞进外层请求体；所有字段均来自 env，不会进入命令行回显
+          PAYLOAD=$(jq -nc \
+            --arg receive_id "$USER_ID" \
+            --arg content "$CONTENT" \
+            '{receive_id: $receive_id, msg_type: "interactive", content: $content}')
+
+          # receive_id_type 必须作为 query param 传递
+          # 不打印 PAYLOAD，直接通过管道投递，避免 user_id 等出现在日志
+          echo "$PAYLOAD" | curl -fsSL -X POST \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -H "Authorization: Bearer ${TOKEN}" \
+            --data-binary @- \
+            "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=user_id" \
+            -o response.json
+
+          # 仅校验 code，不回显原始响应体（可能含 token / receive_id）
+          CODE=$(jq -r '.code // empty' response.json)
+          if [ "$CODE" != "0" ]; then
+            echo "Feishu API returned non-zero code: ${CODE}" >&2
+            exit 1
+          fi
