@@ -12,7 +12,19 @@
 |---|---|---|
 | `build-base.yml` | `Dockerfile.base` / `docker/**` / `backend/**` / `frontend/**` 变更 / 每周定时 / 手动 | 构建 base 镜像，推送 `:base` 标签，完成后级联触发动态层（沿用上次 release 锁定版本） |
 | `docker-build.yml` | `Dockerfile` 变更 / 自动更新触发 / 手动 | 构建动态层，推送版本标签 |
-| `check-update.yml` | 定时 cron / 手动 | 检测 opencode、code-server、codex、serena、claude-code 版本更新，触发 `docker-build.yml` |
+| `check-update.yml` | 定时 cron / 手动 | 检测 opencode、code-server、codex、serena、claude-code 版本更新，触发 `docker-build.yml`；检测到更新时按 app 维度发送飞书"发现新版本"卡片 |
+| `notify.yml` | `workflow_run`（监听 `build-base.yml` / `docker-build.yml` 完成） | 上游构建完成后发送飞书"构建结果"卡片（success / failure 两套模板） |
+
+### 飞书通知拆分
+
+飞书通知按事件类型拆成两条互不重叠的链路，**不要复用 `notify.yml` 处理更新检测**——`workflow_run` 只能拿到上游 `conclusion`，读不到 check-update 内部的版本对比结果，所以更新通知必须由 `check-update.yml` 自己发。
+
+| 链路 | 工作流 | 卡片模板 | 版本 | 触发时机 | 模板变量 |
+|---|---|---|---|---|---|
+| 构建结果通知 | `notify.yml` | `AAqv2e8wrOFTm`（success）/ `AAqv27Co32Y8H`（failure） | `1.0.4` | Base / 动态层构建完成 | `Project_Name` / `Branch` / `Time` / `Actions_name` |
+| 发现新版本通知 | `check-update.yml` | `AAqv2jtyQI8ay` | `1.0.5` | check-update 检测到任意 app 有更新（每个 app 一张卡片） | `App_Name` / `Old_Version` / `New_Version` / `Changelog_URL` / `Time` |
+
+两条链路共用三个 secrets：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_USER_ID`，并遵循统一的隐私约束（token `::add-mask::`、不打印 PAYLOAD、只回显业务 `code`/`msg`）。
 
 ### 触发归属原则
 

@@ -94,61 +94,79 @@ jobs:
 
       # ==========================================
       # 比对版本，任意一个有更新就触发构建
+      # 同时把"有更新"的项写入 /tmp/updates.json，供 notify step 使用
       # ==========================================
       - name: Compare versions
         id: compare
         run: |
+          set -euo pipefail
+
+          NOW_BJ=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M')
+          UPDATES="[]"
           HAS_UPDATE="false"
 
-          # OpenCode 对比
-          if [ "${{ steps.local.outputs.opencode }}" != "${{ steps.opencode.outputs.version }}" ]; then
-            HAS_UPDATE="true"
-            echo "OpenCode needs update: ${{ steps.local.outputs.opencode }} -> ${{ steps.opencode.outputs.version }}"
-          else
-            echo "OpenCode up to date: ${{ steps.opencode.outputs.version }}"
-          fi
+          # 比对单个应用版本；若有更新则记录到 UPDATES 数组
+          # 参数: app_name  local_version  upstream_version  changelog_url
+          check_update() {
+            local app="$1" local_v="$2" upstream_v="$3" changelog_url="$4"
+            if [ "$local_v" != "$upstream_v" ]; then
+              HAS_UPDATE="true"
+              echo "$app needs update: $local_v -> $upstream_v"
+              UPDATES=$(jq -nc \
+                --argjson updates "$UPDATES" \
+                --arg app "$app" \
+                --arg old "$local_v" \
+                --arg new "$upstream_v" \
+                --arg url "$changelog_url" \
+                --arg time "$NOW_BJ" \
+                '$updates + [{app_name: $app, old_version: $old, new_version: $new, changelog_url: $url, time: $time}]')
+            else
+              echo "$app up to date: $upstream_v"
+            fi
+          }
 
-          # code-server 对比
-          if [ "${{ steps.local.outputs.codeserver }}" != "${{ steps.codeserver.outputs.version }}" ]; then
-            HAS_UPDATE="true"
-            echo "code-server needs update: ${{ steps.local.outputs.codeserver }} -> ${{ steps.codeserver.outputs.version }}"
-          else
-            echo "code-server up to date: ${{ steps.codeserver.outputs.version }}"
-          fi
+          # OpenCode: GitHub tag 直接是版本号（含 v 前缀）
+          check_update "OpenCode" \
+            "${{ steps.local.outputs.opencode }}" \
+            "${{ steps.opencode.outputs.version }}" \
+            "https://github.com/anomalyco/opencode/releases/tag/${{ steps.opencode.outputs.version }}"
 
-          # Codex 对比
-          if [ "${{ steps.local.outputs.codex }}" != "${{ steps.codex.outputs.version }}" ]; then
-            HAS_UPDATE="true"
-            echo "Codex needs update: ${{ steps.local.outputs.codex }} -> ${{ steps.codex.outputs.version }}"
-          else
-            echo "Codex up to date: ${{ steps.codex.outputs.version }}"
-          fi
+          # code-server: 本地已剥 v 前缀，URL 里补回
+          check_update "code-server" \
+            "${{ steps.local.outputs.codeserver }}" \
+            "${{ steps.codeserver.outputs.version }}" \
+            "https://github.com/coder/code-server/releases/tag/v${{ steps.codeserver.outputs.version }}"
 
-          # serena-agent 对比
-          if [ "${{ steps.local.outputs.serena }}" != "${{ steps.serena.outputs.version }}" ]; then
-            HAS_UPDATE="true"
-            echo "serena-agent needs update: ${{ steps.local.outputs.serena }} -> ${{ steps.serena.outputs.version }}"
-          else
-            echo "serena-agent up to date: ${{ steps.serena.outputs.version }}"
-          fi
+          # Codex: 本地已剥 rust-v 前缀，URL 里补回
+          check_update "Codex" \
+            "${{ steps.local.outputs.codex }}" \
+            "${{ steps.codex.outputs.version }}" \
+            "https://github.com/openai/codex/releases/tag/rust-v${{ steps.codex.outputs.version }}"
 
-          # Claude Code 对比
-          if [ "${{ steps.local.outputs.claudecode }}" != "${{ steps.claudecode.outputs.version }}" ]; then
-            HAS_UPDATE="true"
-            echo "Claude Code needs update: ${{ steps.local.outputs.claudecode }} -> ${{ steps.claudecode.outputs.version }}"
-          else
-            echo "Claude Code up to date: ${{ steps.claudecode.outputs.version }}"
-          fi
+          # serena-agent: 数据源是 PyPI，Changelog 也指向 PyPI 版本页
+          check_update "serena-agent" \
+            "${{ steps.local.outputs.serena }}" \
+            "${{ steps.serena.outputs.version }}" \
+            "https://pypi.org/project/serena-agent/${{ steps.serena.outputs.version }}/"
 
-          # Open Design 对比
-          if [ "${{ steps.local.outputs.opendesign }}" != "${{ steps.opendesign.outputs.version }}" ]; then
-            HAS_UPDATE="true"
-            echo "Open Design needs update: ${{ steps.local.outputs.opendesign }} -> ${{ steps.opendesign.outputs.version }}"
-          else
-            echo "Open Design up to date: ${{ steps.opendesign.outputs.version }}"
-          fi
+          # Claude Code: 仅 npm 分发，无 GitHub Release，使用仓库 CHANGELOG
+          check_update "Claude Code" \
+            "${{ steps.local.outputs.claudecode }}" \
+            "${{ steps.claudecode.outputs.version }}" \
+            "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md"
+
+          # Open Design: 本地已剥 open-design-v 前缀，URL 里补回
+          check_update "Open Design" \
+            "${{ steps.local.outputs.opendesign }}" \
+            "${{ steps.opendesign.outputs.version }}" \
+            "https://github.com/nexu-io/open-design/releases/tag/open-design-v${{ steps.opendesign.outputs.version }}"
 
           echo "has_update=$HAS_UPDATE" >> $GITHUB_OUTPUT
+
+          # 把待通知项写入文件（GITHUB_OUTPUT 不适合承载 JSON 数组）
+          echo "$UPDATES" > /tmp/updates.json
+          echo "Updates to notify:"
+          jq '.' /tmp/updates.json
 
       - name: Trigger build
         if: steps.compare.outputs.has_update == 'true'
@@ -169,3 +187,93 @@ jobs:
                 open_design_version: '${{ steps.opendesign.outputs.version }}'
               }
             });
+
+      # ==========================================
+      # 通知飞书：每个有更新的 app 发一张卡片
+      # 放在 Trigger build 之后，并用 if: always()
+      # 这样即使 trigger 派发失败也能收到"发现新版本"通知，不被互相阻塞
+      # ==========================================
+      - name: Notify Feishu per update
+        if: always() && steps.compare.outputs.has_update == 'true'
+        env:
+          APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          USER_ID: ${{ secrets.FEISHU_USER_ID }}
+        run: |
+          set -euo pipefail
+
+          # 1. 获取 tenant_access_token（沿用 notify.yml 模式：不 -f，需读 code/msg 定位错误）
+          curl -sS -X POST \
+            -H 'Content-Type: application/json' \
+            -d "{\"app_id\":\"${APP_ID}\",\"app_secret\":\"${APP_SECRET}\"}" \
+            https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal \
+            -o token_response.json
+
+          TOKEN=$(jq -r '.tenant_access_token // empty' token_response.json)
+          if [ -z "$TOKEN" ]; then
+            CODE=$(jq -r '.code // empty' token_response.json)
+            MSG=$(jq -r '.msg // empty' token_response.json)
+            echo "Failed to fetch tenant_access_token. code=${CODE}, msg=${MSG}" >&2
+            exit 1
+          fi
+          # 先 mask 再写 output，避免打印阶段泄露
+          echo "::add-mask::${TOKEN}"
+
+          # 2. 逐条发送通知
+          COUNT=$(jq 'length' /tmp/updates.json)
+          echo "Sending ${COUNT} update notification(s)..."
+
+          for i in $(seq 0 $((COUNT - 1))); do
+            APP_NAME=$(jq -r ".[$i].app_name" /tmp/updates.json)
+            OLD_VERSION=$(jq -r ".[$i].old_version" /tmp/updates.json)
+            NEW_VERSION=$(jq -r ".[$i].new_version" /tmp/updates.json)
+            CHANGELOG_URL=$(jq -r ".[$i].changelog_url" /tmp/updates.json)
+            TIME=$(jq -r ".[$i].time" /tmp/updates.json)
+
+            # 卡片 content：序列化后的 JSON 字符串
+            CONTENT=$(jq -nc \
+              --arg template_id "AAqv2jtyQI8ay" \
+              --arg app_name "$APP_NAME" \
+              --arg old_version "$OLD_VERSION" \
+              --arg new_version "$NEW_VERSION" \
+              --arg changelog_url "$CHANGELOG_URL" \
+              --arg time "$TIME" \
+              '{
+                type: "template",
+                data: {
+                  template_id: $template_id,
+                  template_version_name: "1.0.5",
+                  template_variable: {
+                    App_Name: $app_name,
+                    Old_Version: $old_version,
+                    New_Version: $new_version,
+                    Changelog_URL: $changelog_url,
+                    Time: $time
+                  }
+                }
+              }')
+
+            # 外层请求体；所有字段经 jq 拼装，不出现在命令行回显
+            PAYLOAD=$(jq -nc \
+              --arg receive_id "$USER_ID" \
+              --arg content "$CONTENT" \
+              '{receive_id: $receive_id, msg_type: "interactive", content: $content}')
+
+            # 版本号本身是公开信息，可打印以便追踪；USER_ID/TOKEN 不出现在 echo 中
+            echo "Notifying ${APP_NAME}: ${OLD_VERSION} -> ${NEW_VERSION}"
+
+            # 不 -f：业务错误返回 HTTP 400 + JSON body，需要读 code/msg
+            echo "$PAYLOAD" | curl -sS -X POST \
+              -H 'Content-Type: application/json; charset=utf-8' \
+              -H "Authorization: Bearer ${TOKEN}" \
+              --data-binary @- \
+              "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=user_id" \
+              -o response.json
+
+            CODE=$(jq -r '.code // empty' response.json)
+            MSG=$(jq -r '.msg // empty' response.json)
+            if [ "$CODE" != "0" ]; then
+              echo "Feishu API returned non-zero code for ${APP_NAME}: code=${CODE}, msg=${MSG}" >&2
+              exit 1
+            fi
+          done
