@@ -240,7 +240,10 @@ PrintMotd no
 AcceptEnv LANG LC_*
 EOF
 
-        # root 的 authorized_keys 与 app 共用同一份公钥
+        # 多用户场景：同一份 authorized_keys 分发给 root/app/desktop 三个用户。
+        # authorized_keys 本身支持每行一把公钥，多把公钥在宿主机文件里分行存放即可，
+        # 不需要为每个用户单独挂载文件。这里不能用 >>（追加）：容器重启会重复叠加，
+        # 必须用 cp（覆盖）保证幂等，来源是宿主机 :ro 挂载的唯一真相源文件。
         mkdir -p /root/.ssh
         cp /home/app/.ssh/authorized_keys /root/.ssh/authorized_keys
         chmod 700 /root/.ssh
@@ -249,8 +252,16 @@ EOF
         chmod 700 /home/app/.ssh
         chmod 600 /home/app/.ssh/authorized_keys
         chown -R app:app /home/app/.ssh
+
+        # desktop 用户（多用户引入后必须显式分发，否则该账号无法 SSH 登录）
+        mkdir -p /home/desktop/.ssh
+        cp /home/app/.ssh/authorized_keys /home/desktop/.ssh/authorized_keys
+        chmod 700 /home/desktop/.ssh
+        chmod 600 /home/desktop/.ssh/authorized_keys
+        chown -R desktop:desktop /home/desktop/.ssh
+
         /usr/sbin/sshd
-        echo "==> [SSH] SSH Server 已启动，端口 2223，用户 root/app，公钥认证"
+        echo "==> [SSH] SSH Server 已启动，端口 2223，用户 root/app/desktop，公钥认证"
     else
         echo "==> [SSH] SSH Server 未启用 (挂载公钥到 /home/app/.ssh/authorized_keys 以启用)"
     fi
