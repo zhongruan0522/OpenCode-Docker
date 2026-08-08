@@ -26,6 +26,19 @@
 
 两条链路共用三个 secrets：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_USER_ID`，并遵循统一的隐私约束（token `::add-mask::`、不打印 PAYLOAD、只回显业务 `code`/`msg`）。
 
+### workflow_dispatch 派发必须用 GitHub App token
+
+`build-base.yml`（`trigger-dynamic` job）和 `check-update.yml`（`Trigger build` step）都会用 `actions/github-script` 调 `createWorkflowDispatch` 触发 `docker-build.yml`。**派发时必须用 GitHub App installation token，不能用默认 `GITHUB_TOKEN`**。
+
+根因（GHA 防递归机制，见 [Triggering a workflow](https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow)）：由 `GITHUB_TOKEN` 触发的 `workflow_dispatch` run 虽然会执行，但它完成时派发的 `workflow_run(completed)` 事件**会被 GitHub 静默抑制**，导致 `notify.yml` 收不到动态层构建完成通知（这正是"只收到 A 通知收不到 B 通知"的原因）。改用 App token 派发后，完成事件能正常派发。
+
+| 资源 | 用途 | 配置位置 |
+|---|---|---|
+| `vars.GH_APP_CLIENT_ID` | GitHub App Client ID | Repository **variables**（非敏感） |
+| `secrets.GH_APP_PRIVATE_KEY` | GitHub App 私钥 | Repository **secrets** |
+
+派发通过 `actions/create-github-app-token@v3` 换取 installation token，传给 `github-script` 的 `github-token` 入参；只申请 `permission-actions: write` 最小权限。App 需安装到本仓库并授予 **Actions** 读写权限。
+
 ### 触发归属原则
 
 - **`docker/**`（启动脚本、supervisord 配置）属于 Base 层**：被 `Dockerfile.base` 直接 COPY，改动只触发 `build-base.yml`，Base 构建完成后通过 `trigger-dynamic` job 用上次 release 锁定的版本号级联重建动态层。

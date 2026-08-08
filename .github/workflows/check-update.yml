@@ -168,10 +168,24 @@ jobs:
           echo "Updates to notify:"
           jq '.' /tmp/updates.json
 
+      - name: Generate GitHub App token
+        # 用 GitHub App installation token 而非默认 GITHUB_TOKEN 派发 workflow_dispatch。
+        # 由 GITHUB_TOKEN 派发的 run，其完成时派发的 workflow_run 事件会被 GHA 防递归机制抑制，
+        # 导致 notify.yml 收不到动态层构建完成通知；改用 App token 可正常派发事件。
+        id: app-token
+        if: steps.compare.outputs.has_update == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          # 仅授权派发 workflow_dispatch 所需的最小权限
+          permission-actions: write
+
       - name: Trigger build
         if: steps.compare.outputs.has_update == 'true'
         uses: actions/github-script@v8
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
