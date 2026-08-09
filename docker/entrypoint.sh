@@ -31,8 +31,15 @@ fi
 if [ "${ENABLE_WARP:-0}" = "1" ]; then
     WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
     if /usr/local/bin/init-warp.sh; then
-        export SOCKS5_PROXY="socks5://127.0.0.1:${WARP_SOCKS_PORT}"
-        echo "==> [WARP] 环境变量已注入: SOCKS5_PROXY=${SOCKS5_PROXY}"
+        # microsocks 启用认证时（SOCKS_USER/SOCKS_PASS 非空），SOCKS5_PROXY 必须同步拼上账号密码，
+        # 否则容器内依赖该变量的进程（opencode/codex 等）会因认证失败而无法走代理。
+        if [ -n "${SOCKS_USER:-}" ] && [ -n "${SOCKS_PASS:-}" ]; then
+            export SOCKS5_PROXY="socks5://${SOCKS_USER}:${SOCKS_PASS}@127.0.0.1:${WARP_SOCKS_PORT}"
+            echo "==> [WARP] 环境变量已注入: SOCKS5_PROXY=socks5://***:***@127.0.0.1:${WARP_SOCKS_PORT}"
+        else
+            export SOCKS5_PROXY="socks5://127.0.0.1:${WARP_SOCKS_PORT}"
+            echo "==> [WARP] 环境变量已注入: SOCKS5_PROXY=${SOCKS5_PROXY}"
+        fi
     else
         echo "==> [WARP] WARNING: MicroWARP 初始化失败，跳过代理注入并继续启动主服务" >&2
     fi
