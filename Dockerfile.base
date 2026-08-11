@@ -170,7 +170,8 @@ RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g @playwright/mcp@${PLAYWRIG
     && npm install -g eas-cli@${EAS_CLI_VERSION}
 
 # 高频全局 npm 工具（出现在 3+ 项目）
-RUN npm install -g typescript eslint prettier esbuild tsx turbo oxlint vitest
+# @vscode/vsce：cursor-zh-cn-pack 打包 .vsix 用（npm run package / release:build）
+RUN npm install -g typescript eslint prettier esbuild tsx turbo oxlint vitest @vscode/vsce
 
 # yarn（UnifyNook web 声明 packageManager: yarn@1.22.22）
 # Node.js 24 镜像已内置 corepack 和 yarn shim，npm install -g 会 EEXIST 冲突。
