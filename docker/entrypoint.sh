@@ -118,13 +118,13 @@ if [ "$(id -u)" = '0' ]; then
     # 逐个 chown 旧属主文件（/home/app 下挂载了 .cursor-server/.local/.cache 等
     # 数 G 数据），首次启动耗时可达数分钟，导致 healthcheck 在 supervisord 启动前
     # 就判容器 unhealthy。这里直接改 /etc/passwd、/etc/group 的账户元数据即可，
-    # gosu app 只读 passwd 的 UID 字段决定降权目标，等价但不触发文件遍历。
+    # supervisord 的 user=app 只读 passwd 的 UID 字段决定降权目标，等价但不触发文件遍历。
     if [ "$LOCAL_UID" = "0" ]; then
         echo "Running as root (LOCAL_UID=0), patching /etc/passwd and /etc/group (no file scan)"
         if [ "$(id -u app)" != "0" ] || [ "$(id -g app)" != "0" ]; then
             sed -i 's/^\(app:[^:]*:\)[0-9]*:[0-9]*:/\10:0:/' /etc/passwd
             sed -i 's/^\(app:[^:]*:\)[0-9]*:/\10:/' /etc/group
-            # 校验：失败必须立即暴露，否则 gosu app 会以错误身份运行
+            # 校验：失败必须立即暴露，否则 supervisord 的 user=app 会以错误身份运行。
             if [ "$(id -u app)" != "0" ] || [ "$(id -g app)" != "0" ]; then
                 echo "FATAL: failed to set app uid/gid to 0 (passwd=$(getent passwd app))" >&2
                 exit 1
@@ -210,7 +210,7 @@ EOF
 
     # ==========================================
     # 远程桌面 (xrdp) 初始化（可选，通过 ENABLE_DESKTOP=1 开启）
-    # xrdp 需要 root 权限（绑定端口 + PAM 认证），不能放进 supervisord（supervisord 以 app 用户运行）
+    # xrdp 需要 root 权限（绑定端口 + PAM 认证），不能放进 supervisord。
     # 容器内无 systemd，必须手动启动 xrdp-sesman（会话管理器）和 xrdp（RDP 守护进程）
     # 同时手动拉起系统 D-Bus（xfce4-polkit / udisks2 / Thunar 挂载都依赖它）
     # 默认桌面：XFCE4（xfwm4 窗口管理器 + xfce4-panel 任务栏 + xfdesktop 桌面图标）
@@ -240,7 +240,7 @@ EOF
         echo "==> [DockerD] 开机自启已关闭 (默认)。需要时运行: supervisorctl start dockerd"
     fi
 
-    exec gosu app /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
+    exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
 fi
 
 exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
