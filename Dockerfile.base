@@ -729,9 +729,13 @@ COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
 # - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
 # - xfce-desktop.xml：默认壁纸路径
 # - xfwm4.xml：窗口管理器主题、标题按钮布局
+# - xfce4-panel.xml：任务栏位置/插件顺序（底部 48px + whiskermenu + tasklist + 托盘 + 时钟）
+#   缺它则 xfce4-panel 首启用 hardcoded 默认值（顶部 panel + 老 applicationsmenu），
+#   表现为"开始菜单在最顶上 + 桌面细节不对齐"——这是登录后视觉割裂的根因。
 COPY docker/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
 COPY docker/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 COPY docker/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+COPY docker/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
 # Fluent 壁纸（明/暗），xfdesktop 通过 librsvg 直接渲染 SVG
 COPY docker/desktop-fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
 COPY docker/desktop-fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg

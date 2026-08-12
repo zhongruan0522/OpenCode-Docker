@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XFCE4 任务栏（xfce4-panel）默认配置
+     对齐 Win11 经典底栏风格：
+       - 单 panel，贴底居中（XFCE_SCREEN_POSITION_SF=8，length=100 撑满屏宽）
+       - 高度 48px（贴 Win11 24H2 任务栏尺寸，RDP 下点击区域大且不挤）
+       - 内容：whiskermenu（开始按钮，保持默认 XFCE logo）→ tasklist（窗口按钮）
+              → separator（弹性分隔顶到右侧）→ systray（系统托盘）→ clock（时钟）
+
+     为什么这个文件不能省：
+     XFCE 在没有 xfconf 默认配置时，xfce4-panel 首启用 hardcoded 默认值——
+     panel 在屏幕【顶部】、用老式 applicationsmenu 而非 whiskermenu、
+     按钮顺序也跟 Win11 不一致。这就是登录后"开始菜单在最顶上 + 桌面细节都不对齐"
+     的根因。装了 xfce4-whiskermenu-plugin 但没这份配置，panel 不会自动启用它。
+
+     字段参考（XFCE 4.18，Debian bookworm 版本）：
+       position p=8     底部居中（snapped to bottom edge, center horizontally）
+                        enum: 0=floating 1-4 边角 5-7 顶 8-10 底，8=底居中
+       length 100       百分比（配合 length-adjust=false 严格撑满屏宽）
+       size 48          panel 高度 px
+       icon-size 0      跟随 panel size（0=自动）
+       position-locked  锁定位置，防止 RDP 重连漂移
+       plugin-ids       从左到右的插件顺序，对应 /plugins/plugin-N 的 value
+     文档：
+       https://docs.xfce.org/xfce/xfce4-panel/start
+       https://docs.xfce.org/xfce/xfconf/start -->
+<channel name="xfce4-panel" version="1.0">
+  <property name="configver" type="int" value="2"/>
+
+  <!-- 所有插件的实例声明：plugin-N 的 value 是插件内部类型名 -->
+  <property name="plugins" type="empty">
+    <!-- 1: Whisker Menu（开始菜单本体，xfce4-whiskermenu-plugin 提供）
+         保持默认 XFCE logo（button-icon/button-title 留空使用主题默认值） -->
+    <property name="plugin-1" type="string" value="whiskermenu"/>
+    <!-- 2: 窗口按钮（tasklist），显示当前打开的窗口，类似 Win 任务栏窗口区 -->
+    <property name="plugin-2" type="string" value="tasklist">
+      <property name="grouping" type="bool" value="true"/>
+      <!-- grouping=合并同应用窗口，贴 Win11 行为 -->
+      <property name="flat-buttons" type="bool" value="true"/>
+      <!-- flat-buttons=无边框扁平按钮，Win11 风格 -->
+      <property name="sort-order" type="int" value="1"/>
+      <!-- sort-order=1 按时间排序（最近使用的在最前） -->
+    </property>
+    <!-- 3: 弹性分隔符，把后续插件顶到任务栏最右 -->
+    <property name="plugin-3" type="string" value="separator">
+      <property name="expand" type="bool" value="true"/>
+      <property name="style" type="bool" value="false"/>
+      <!-- style=false 不画分隔线，纯占位撑开空间 -->
+    </property>
+    <!-- 4: 系统托盘（systray），收纳 fcitx5 输入法、通知图标等 -->
+    <property name="plugin-4" type="string" value="systray">
+      <property name="square-icons" type="bool" value="true"/>
+      <!-- square-icons=正方形图标，对齐 Fluent 视觉 -->
+    </property>
+    <!-- 5: 时钟，Win11 风格 24 小时制 + 月日 -->
+    <property name="plugin-5" type="string" value="clock">
+      <property name="digital-format" type="string" value="%m月%d日 %R"/>
+      <!-- %R=HH:MM（24h），%m月%d日=中文日期，整体贴近 Win11 右下角 -->
+    </property>
+  </property>
+
+  <property name="panels" type="array">
+    <value type="int" value="1"/>
+    <property name="panel-1" type="empty">
+      <!-- 贴底居中 + 撑满屏宽 + 48px 高，对齐 Win11 任务栏 -->
+      <property name="position" type="string" value="p=8;x=0;y=0"/>
+      <property name="length" type="uint" value="100"/>
+      <property name="length-adjust" type="bool" value="false"/>
+      <property name="size" type="uint" value="48"/>
+      <property name="icon-size" type="uint" value="0"/>
+      <!-- nrows=1 单行布局，避免 48px 高度触发 tasklist 双行堆叠 -->
+      <property name="nrows" type="uint" value="1"/>
+      <!-- position-locked 锁定，避免 RDP 重连时 panel 漂移 -->
+      <property name="position-locked" type="bool" value="true"/>
+      <!-- 不自动隐藏（autohide-behavior=0），Win11 任务栏常驻 -->
+      <property name="autohide-behavior" type="uint" value="0"/>
+      <!-- output-name=Primary 跟随主显示器，多屏切换不用改配置 -->
+      <property name="output-name" type="string" value="Primary"/>
+      <!-- enable-struts=true 让窗口最大化时自动避开任务栏区域 -->
+      <property name="enable-struts" type="bool" value="true"/>
+
+      <!-- 插件顺序：whiskermenu → tasklist → separator(弹性) → systray → clock -->
+      <property name="plugin-ids" type="array">
+        <value type="int" value="1"/>
+        <value type="int" value="2"/>
+        <value type="int" value="3"/>
+        <value type="int" value="4"/>
+        <value type="int" value="5"/>
+      </property>
+    </property>
+  </property>
+</channel>

@@ -68,6 +68,10 @@ services:
       - seccomp:unconfined
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
+    # Chrome/Chromium 用 /dev/shm 做进程间共享内存，Docker 默认仅 64MB，
+    # 桌面会话中打开浏览器会因 shm 不足触发 EIO（"输入/输出错误"）并频繁崩溃。
+    # 提升到 2GB 彻底消除该瓶颈（xdpyinfo、Playwright、GUI Chrome 共同受益）。
+    shm_size: "2gb"
     volumes:
       # === 工作区 ===
       - ./workspace:/workspace:rshared
