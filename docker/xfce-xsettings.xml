@@ -3,40 +3,57 @@
      主题：Fluent（vinceliuice/Fluent-gtk-theme，Win11 风格）
      图标：Fluent（vinceliuice/Fluent-icon-theme）
      字体：Sarasa UI SC（中英文等宽对齐，终端/编辑器友好）
-     渲染：次像素 RGB + 轻微 Hinting，提升 RDP 远程显示清晰度 -->
-<channel name="xsettings" version="1">
-  <property name="Gtk" type="empty">
+     渲染：次像素 RGB + 轻微 Hinting，提升 RDP 远程显示清晰度
+
+     ⚠️ 关键修复（对齐 XFCE 上游 xsettings.xml 源码结构）：
+     - ThemeName/IconThemeName 必须在 /Net/ 下（旧版误放 /Gtk/，导致主题完全不生效）
+     - CursorThemeName 用空字符串（XFCE 上游惯例，"default" 是 fallback 名能跑但非官方）
+     - Xft/Hinting 改 -1（自动，XFCE 上游默认；旧的 1=轻微 hinting 是硬编码可能跟字体不匹配）
+     - 移除 Gtk3-emoji-support/ShellShowsAppIcons/ApplicationPreferDarkTheme 三个键：
+       它们不在 freedesktop XSETTINGS 规范也不在 XFCE 上游 xsettings.xml，
+       xfsettingsd 不识别，写在 /Gtk/ 下纯属噪声。其中"暗色偏好"应通过 GTK 设置，
+       不通过 xsettings——保留下来只会制造"看起来设了实际没生效"的错觉。
+
+     参考：
+       https://github.com/xfce-mirror/xfce4-settings/blob/master/xfsettingsd/xsettings.xml
+       https://www.freedesktop.org/wiki/Specifications/XSettingsRegistry/ -->
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <!-- GTK 主题名（XSETTINGS 规范位置：Net/ThemeName，必须在 /Net/ 下） -->
     <property name="ThemeName" type="string" value="Fluent-Dark"/>
+    <!-- 图标主题名（同上，必须在 /Net/ 下） -->
     <property name="IconThemeName" type="string" value="Fluent"/>
-    <property name="FontName" type="string" value="Sarasa UI SC 10"/>
-    <property name="MonospaceFontName" type="string" value="Sarasa Mono SC 11"/>
-    <property name="CursorThemeName" type="string" value="default"/>
-    <property name="ToolbarStyle" type="int" value="2"/>
-    <property name="ToolbarIconSize" type="int" value="1"/>
-    <property name="MenuImages" type="bool" value="true"/>
-    <property name="ButtonImages" type="bool" value="true"/>
-    <property name="DecorationLayout" type="string" value="menu:minimize,maximize,close"/>
-    <property name="Gtk3-emoji-support" type="bool" value="true"/>
-    <property name="ShellShowsAppIcons" type="bool" value="true"/>
-    <!-- 启用暗色偏好（Fluent-Dark），GTK libadwaita 应用会跟随 -->
-    <property name="ApplicationPreferDarkTheme" type="bool" value="true"/>
+    <!-- 双击间隔 250ms（默认 400，RDP 远程操作稍敏感一点更顺手）-->
+    <property name="DoubleClickTime" type="int" value="250"/>
+    <!-- Dnd 拖拽阈值 5px（默认 8）-->
+    <property name="DndDragThreshold" type="int" value="5"/>
   </property>
   <property name="Xft" type="empty">
     <!-- DPI：96 是 xrdp 默认，与 Win11 一致 -->
     <property name="DPI" type="int" value="96"/>
     <!-- AntiAlias：1=开启，远程桌面强烈建议开 -->
     <property name="Antialias" type="int" value="1"/>
-    <!-- Hinting：1=轻微，0=无，2=中，3=满；RDP 下 1 综合最佳 -->
-    <property name="Hinting" type="int" value="1"/>
+    <!-- Hinting：-1=自动（XFCE 上游默认），1=轻微，0=无，2=中，3=满 -->
+    <property name="Hinting" type="int" value="-1"/>
     <!-- HintStyle：hintslight（轻微 hinting 对应 Subpixel）-->
     <property name="HintStyle" type="string" value="hintslight"/>
     <!-- RGBA：次像素 RGB 排列，提升 RDP 下文字锐度 -->
     <property name="RGBA" type="string" value="rgb"/>
   </property>
-  <property name="Net" type="empty">
-    <!-- 双击间隔 250ms（默认 300，RDP 远程操作稍敏感一点更顺手）-->
-    <property name="DoubleClickTime" type="int" value="250"/>
-    <!-- Dnd 拖拽阈值 5px（默认 8）-->
-    <property name="DndDragThreshold" type="int" value="5"/>
+  <property name="Gtk" type="empty">
+    <!-- 字体（FontName 在 /Gtk/ 下，符合 XSETTINGS 规范） -->
+    <property name="FontName" type="string" value="Sarasa UI SC 10"/>
+    <property name="MonospaceFontName" type="string" value="Sarasa Mono SC 11"/>
+    <!-- CursorThemeName 空字符串=使用系统默认游标（XFCE 上游惯例）。
+         "default" 是 fallback 名能跑但不规范；空串让 xcursor 用 update-alternatives 选系统默认 -->
+    <property name="CursorThemeName" type="string" value=""/>
+    <property name="ToolbarStyle" type="int" value="2"/>
+    <property name="ToolbarIconSize" type="int" value="1"/>
+    <property name="MenuImages" type="bool" value="true"/>
+    <property name="ButtonImages" type="bool" value="true"/>
+    <!-- DecorationLayout：GTK CSD 应用（如 code-server 内 GTK 程序）的窗口按钮布局。
+         语法 "左:右"，对齐 Win11：左侧 menu，右侧 minimize,maximize,close。
+         跟 xfwm4.xml 的 button_layout=|HMC（传统 X11 装饰窗口）是两套独立系统，需同步保持视觉一致 -->
+    <property name="DecorationLayout" type="string" value="menu:minimize,maximize,close"/>
   </property>
 </channel>

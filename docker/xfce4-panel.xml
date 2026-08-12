@@ -4,6 +4,7 @@
        - 单 panel，贴底居中（XFCE_SCREEN_POSITION_SF=8，length=100 撑满屏宽）
        - 高度 48px（贴 Win11 24H2 任务栏尺寸，RDP 下点击区域大且不挤）
        - 内容：whiskermenu（开始按钮，保持默认 XFCE logo）→ tasklist（窗口按钮）
+              → pager（工作区切换，对齐 xfwm4 workspace_count=2）
               → separator（弹性分隔顶到右侧）→ systray（系统托盘）→ clock（时钟）
 
      为什么这个文件不能省：
@@ -40,19 +41,26 @@
       <property name="sort-order" type="int" value="1"/>
       <!-- sort-order=1 按时间排序（最近使用的在最前） -->
     </property>
-    <!-- 3: 弹性分隔符，把后续插件顶到任务栏最右 -->
-    <property name="plugin-3" type="string" value="separator">
+    <!-- 3: 工作区切换器（pager），对齐 xfwm4.xml workspace_count=2。
+         没 pager 用户只能靠键盘快捷键切工作区，体验断裂。
+         rows=1 单行布局；miniature-view=false 显示工作区名而不是缩略图（更省 RDP 带宽） -->
+    <property name="plugin-3" type="string" value="pager">
+      <property name="rows" type="uint" value="1"/>
+      <property name="miniature-view" type="bool" value="false"/>
+    </property>
+    <!-- 4: 弹性分隔符，把后续插件顶到任务栏最右 -->
+    <property name="plugin-4" type="string" value="separator">
       <property name="expand" type="bool" value="true"/>
       <property name="style" type="bool" value="false"/>
       <!-- style=false 不画分隔线，纯占位撑开空间 -->
     </property>
-    <!-- 4: 系统托盘（systray），收纳 fcitx5 输入法、通知图标等 -->
-    <property name="plugin-4" type="string" value="systray">
+    <!-- 5: 系统托盘（systray），收纳 fcitx5 输入法、通知图标等 -->
+    <property name="plugin-5" type="string" value="systray">
       <property name="square-icons" type="bool" value="true"/>
       <!-- square-icons=正方形图标，对齐 Fluent 视觉 -->
     </property>
-    <!-- 5: 时钟，Win11 风格 24 小时制 + 月日 -->
-    <property name="plugin-5" type="string" value="clock">
+    <!-- 6: 时钟，Win11 风格 24 小时制 + 月日 -->
+    <property name="plugin-6" type="string" value="clock">
       <property name="digital-format" type="string" value="%m月%d日 %R"/>
       <!-- %R=HH:MM（24h），%m月%d日=中文日期，整体贴近 Win11 右下角 -->
     </property>
@@ -78,13 +86,14 @@
       <!-- enable-struts=true 让窗口最大化时自动避开任务栏区域 -->
       <property name="enable-struts" type="bool" value="true"/>
 
-      <!-- 插件顺序：whiskermenu → tasklist → separator(弹性) → systray → clock -->
+      <!-- 插件顺序：whiskermenu → tasklist → pager → separator(弹性) → systray → clock -->
       <property name="plugin-ids" type="array">
         <value type="int" value="1"/>
         <value type="int" value="2"/>
         <value type="int" value="3"/>
         <value type="int" value="4"/>
         <value type="int" value="5"/>
+        <value type="int" value="6"/>
       </property>
     </property>
   </property>

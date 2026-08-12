@@ -48,7 +48,7 @@
     <property name="icon-size" type="uint" value="48"/>
     <!-- 文字颜色：白色，描边自动 -->
     <property name="tooltip-size" type="double" value="64.000000"/>
-    <!-- 单击激活（RDP 远程体验更接近 Win）-->
+    <!-- 双击激活（false=双击，对齐 Win11 桌面图标行为；原注释误写"单击激活"与值矛盾）-->
     <property name="single-click" type="bool" value="false"/>
     <!-- 显示 Thunar 菜单的"文件管理器"上下文菜单 -->
     <property name="use-menu" type="bool" value="true"/>

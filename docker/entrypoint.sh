@@ -350,6 +350,23 @@ XSESSION_EOF
         chmod 2775 /var/run/xrdp
         chmod 1777 /tmp/.X11-unix
 
+        # 为 desktop/app 用户创建 XDG_RUNTIME_DIR（/run/user/<uid>）
+        # 容器无 systemd-logind，pam_systemd 不会自动创建该目录；
+        # fcitx5 / dconf / 各种 GTK 应用都需要该目录写 socket 和临时文件，
+        # 缺失会导致 fcitx5 启动后无法连接 dbus、输入法不可用、且错误被
+        # >/dev/null 静默吞掉（用户表现就是"中文输入法按不出来"）。
+        # 0700 权限是 XDG_RUNTIME_DIR 规范要求（仅属主可读写）。
+        for _u in desktop app; do
+            _uid="$(id -u "$_u")"
+            if [ -n "$_uid" ]; then
+                mkdir -p "/run/user/${_uid}"
+                chown "${_u}:${_u}" "/run/user/${_uid}"
+                chmod 700 "/run/user/${_uid}"
+            fi
+        done
+        # XDG_RUNTIME_DIR 环境变量本身由 xrdp-startwm.sh 在会话启动时导出
+        # （/etc/profile 只对登录 shell 生效，xrdp 会话不走 login shell）
+
         # 清理上次运行残留的 pid 文件：
         # 容器重启时进程已死，但 /var/run/xrdp/xrdp-sesman.pid 可能残留，
         # 导致 xrdp-sesman 误判为 "is already running" 并以非零退出，
