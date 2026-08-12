@@ -8,6 +8,7 @@ on:
       - 'Dockerfile.base'
       - 'base/**'
       - 'docker/**'
+      - 'desktop/**'
       - 'backend/**'
       - 'frontend/**'
   pull_request:
@@ -17,6 +18,7 @@ on:
       - 'Dockerfile.base'
       - 'base/**'
       - 'docker/**'
+      - 'desktop/**'
       - 'backend/**'
       - 'frontend/**'
   schedule:

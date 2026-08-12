@@ -635,7 +635,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
 # 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
 # 注意：不要在 RUN 里用 `cmd1 && cmd2 <<EOF ... EOF` 这种"复合命令 + shell heredoc"形式，
 #       BuildKit 的 Dockerfile 解析器会把 heredoc 后续行当成新 Dockerfile 指令报
-#       "unknown instruction"。大段配置文件统一通过 COPY docker/ 注入。
+#       "unknown instruction"。大段配置文件统一通过 COPY 注入（见文件末尾）。
 RUN sed -i \
     -e 's/^port=3389/port=3390/' \
     -e 's/^max_bpp=32/max_bpp=24/' \
@@ -718,16 +718,20 @@ RUN bash /tmp/preload-go-modules.sh \
     && chown -R app:app /home/app/go \
     && rm -f /tmp/preload-go-modules.sh
 
+# === 容器启动 / 进程管理脚本（docker/） ===
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
-COPY base/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
-COPY docker/desktop/init-desktop.sh /usr/local/bin/init-desktop.sh
-COPY docker/desktop/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
-COPY docker/desktop/opencode-*.desktop /usr/share/applications/
-# xrdp + XFCE4 启动脚本和默认配置（不走 RUN heredoc 是为了避免 BuildKit
+COPY docker/init-warp.sh /usr/local/bin/init-warp.sh
+COPY docker/init-desktop.sh /usr/local/bin/init-desktop.sh
+# xrdp 启动会话脚本（不走 RUN heredoc 是为了避免 BuildKit
 # 解析器把"复合命令 + shell heredoc"中的 heredoc 内容误判为 Dockerfile 指令）
 COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
+
+# === 桌面环境配置 / 资源 / 快捷方式（desktop/） ===
+# 桌面快捷方式：同时放入应用菜单和 opencode 专用启动器目录
+COPY desktop/launchers/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
+COPY desktop/launchers/opencode-*.desktop /usr/share/applications/
 # Fluent 桌面默认配置：
 # - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
 # - xfce-desktop.xml：默认壁纸路径
@@ -735,13 +739,13 @@ COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
 # - xfce4-panel.xml：任务栏位置/插件顺序（底部 48px + whiskermenu + tasklist + 托盘 + 时钟）
 #   缺它则 xfce4-panel 首启用 hardcoded 默认值（顶部 panel + 老 applicationsmenu），
 #   表现为"开始菜单在最顶上 + 桌面细节不对齐"——这是登录后视觉割裂的根因。
-COPY docker/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
-COPY docker/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
-COPY docker/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
-COPY docker/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+COPY desktop/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+COPY desktop/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+COPY desktop/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+COPY desktop/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
 # Fluent 壁纸（明/暗），xfdesktop 通过 librsvg 直接渲染 SVG
-COPY docker/desktop-fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
-COPY docker/desktop-fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
+COPY desktop/fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
+COPY desktop/fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /usr/local/bin/init-desktop.sh /etc/xrdp/startwm.sh \
     && chmod 755 /usr/local/share/opencode-desktop-launchers/opencode-*.desktop /usr/share/applications/opencode-*.desktop
 
