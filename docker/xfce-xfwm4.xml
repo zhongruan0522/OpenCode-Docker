@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- XFCE xfwm4 窗口管理器默认配置
      主题：Fluent-Dark（与 GTK 主题配套，含标题栏素材）
-     按钮布局：menu:minimize,maximize,close（Win11 顺序）
-     标题字体：Sarasa UI SC 9 加粗 -->
+     按钮布局：|HMC（左侧空、右侧 最小化-最大化-关闭），Win11 标准
+     标题字体：Sarasa UI SC 9 加粗
+     button_layout 语法：| 是左右分隔符，左侧字符显示在标题栏左、右侧字符显示在右。
+     字符：H=Hide/最小化 M=Maximize C=Close O=Options 菜单 T=Sticky S=Shade。
+     历史 bug：原值 CMH| 含义是「左上角 关闭-最大化-最小化，右侧空」——
+     跟注释里写的「Win11 顺序」完全相反，实际是 macOS 风格在左上角。 -->
 <channel name="xfwm4" version="1">
   <property name="general" type="empty">
     <property name="theme" type="string" value="Fluent-Dark"/>
-    <property name="button_layout" type="string" value="CMH|"/>
-    <!-- C=close M=maximize H=minimize | 后是右侧；Win11 标准布局 -->
+    <property name="button_layout" type="string" value="|HMC"/>
+    <!-- |HMC = 左侧无按钮，右侧依次 H(最小化) M(最大化) C(关闭)，对齐 Win11 -->
     <property name="title_font" type="string" value="Sarasa UI SC SemiBold 9"/>
     <!-- 焦点跟随鼠标关闭（RDP 远程默认点击聚焦更符合习惯）-->
     <property name="click_to_focus" type="bool" value="true"/>
