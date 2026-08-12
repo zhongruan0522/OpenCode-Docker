@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Browser
+Name[zh_CN]=浏览器
+Comment=Open Google Chrome
+Comment[zh_CN]=打开 Google Chrome
+Exec=google-chrome-stable
+Icon=google-chrome
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=true

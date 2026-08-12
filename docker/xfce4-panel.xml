@@ -29,9 +29,29 @@
 
   <!-- 所有插件的实例声明：plugin-N 的 value 是插件内部类型名 -->
   <property name="plugins" type="empty">
-    <!-- 1: Whisker Menu（开始菜单本体，xfce4-whiskermenu-plugin 提供）
-         保持默认 XFCE logo（button-icon/button-title 留空使用主题默认值） -->
-    <property name="plugin-1" type="string" value="whiskermenu"/>
+    <!-- 1: Whisker Menu（开始菜单本体，xfce4-whiskermenu-plugin 提供）。
+         tiny_container 的桌面来自容器内 XFCE + Fluent 主题，这里用系统级
+         .desktop 启动项预置常用入口，避免首次登录后菜单空洞。 -->
+    <property name="plugin-1" type="string" value="whiskermenu">
+      <property name="button-icon" type="string" value="start-here-symbolic"/>
+      <property name="button-title" type="string" value="开始"/>
+      <property name="show-button-title" type="bool" value="false"/>
+      <property name="menu-width" type="int" value="520"/>
+      <property name="menu-height" type="int" value="620"/>
+      <property name="item-icon-size" type="int" value="3"/>
+      <property name="category-icon-size" type="int" value="2"/>
+      <property name="launcher-show-name" type="bool" value="true"/>
+      <property name="launcher-show-description" type="bool" value="true"/>
+      <property name="launcher-show-tooltip" type="bool" value="true"/>
+      <property name="hover-switch-category" type="bool" value="true"/>
+      <property name="recent-items-max" type="int" value="10"/>
+      <property name="favorites" type="array">
+        <value type="string" value="opencode-terminal.desktop"/>
+        <value type="string" value="opencode-workspace.desktop"/>
+        <value type="string" value="opencode-browser.desktop"/>
+        <value type="string" value="opencode-code-server.desktop"/>
+      </property>
+    </property>
     <!-- 2: 窗口按钮（tasklist），显示当前打开的窗口，类似 Win 任务栏窗口区 -->
     <property name="plugin-2" type="string" value="tasklist">
       <property name="grouping" type="bool" value="true"/>
@@ -40,6 +60,8 @@
       <!-- flat-buttons=无边框扁平按钮，Win11 风格 -->
       <property name="sort-order" type="int" value="1"/>
       <!-- sort-order=1 按时间排序（最近使用的在最前） -->
+      <property name="show-labels" type="bool" value="true"/>
+      <property name="show-handle" type="bool" value="false"/>
     </property>
     <!-- 3: 工作区切换器（pager），对齐 xfwm4.xml workspace_count=2。
          没 pager 用户只能靠键盘快捷键切工作区，体验断裂。
@@ -61,8 +83,9 @@
     </property>
     <!-- 6: 时钟，Win11 风格 24 小时制 + 月日 -->
     <property name="plugin-6" type="string" value="clock">
-      <property name="digital-format" type="string" value="%m月%d日 %R"/>
-      <!-- %R=HH:MM（24h），%m月%d日=中文日期，整体贴近 Win11 右下角 -->
+      <property name="mode" type="uint" value="2"/>
+      <property name="digital-format" type="string" value="%R&#10;%m月%d日"/>
+      <!-- 双行时间/日期，贴近 Win11 右下角信息密度；&#10; 是 XML 中的换行符。 -->
     </property>
   </property>
 

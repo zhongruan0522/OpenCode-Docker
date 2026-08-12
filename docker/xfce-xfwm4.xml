@@ -17,6 +17,7 @@
     <property name="click_to_focus" type="bool" value="true"/>
     <property name="focus_new" type="bool" value="true"/>
     <property name="raise_on_click" type="bool" value="true"/>
+    <property name="raise_on_focus" type="bool" value="false"/>
     <!-- 捕获移动时实时显示（RDP 带宽 OK 时体验好）-->
     <property name="box_move" type="bool" value="false"/>
     <property name="box_resize" type="bool" value="false"/>
@@ -24,7 +25,13 @@
     <property name="double_click_action" type="string" value="maximize"/>
     <!-- 滚动不透明度关闭，避免误操作 -->
     <property name="scroll_workspaces" type="bool" value="false"/>
+    <property name="wrap_windows" type="bool" value="false"/>
+    <property name="wrap_workspaces" type="bool" value="false"/>
     <!-- 工作区数量 2（默认 4 太多，RDP 单屏一般够用）-->
     <property name="workspace_count" type="int" value="2"/>
+    <property name="workspace_names" type="array">
+      <value type="string" value="工作区 1"/>
+      <value type="string" value="工作区 2"/>
+    </property>
   </property>
 </channel>

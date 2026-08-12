@@ -23,6 +23,8 @@
     <property name="ThemeName" type="string" value="Fluent-Dark"/>
     <!-- 图标主题名（同上，必须在 /Net/ 下） -->
     <property name="IconThemeName" type="string" value="Fluent"/>
+    <!-- 回退声音主题沿用 freedesktop，避免 GTK 应用查找声音主题时报错。 -->
+    <property name="SoundThemeName" type="string" value="freedesktop"/>
     <!-- 双击间隔 250ms（默认 400，RDP 远程操作稍敏感一点更顺手）-->
     <property name="DoubleClickTime" type="int" value="250"/>
     <!-- Dnd 拖拽阈值 5px（默认 8）-->
@@ -51,6 +53,8 @@
     <property name="ToolbarIconSize" type="int" value="1"/>
     <property name="MenuImages" type="bool" value="true"/>
     <property name="ButtonImages" type="bool" value="true"/>
+    <property name="CanChangeAccels" type="bool" value="false"/>
+    <property name="DialogsUseHeader" type="bool" value="false"/>
     <!-- DecorationLayout：GTK CSD 应用（如 code-server 内 GTK 程序）的窗口按钮布局。
          语法 "左:右"，对齐 Win11：左侧 menu，右侧 minimize,maximize,close。
          跟 xfwm4.xml 的 button_layout=|HMC（传统 X11 装饰窗口）是两套独立系统，需同步保持视觉一致 -->

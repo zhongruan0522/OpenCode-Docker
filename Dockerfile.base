@@ -722,6 +722,9 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY base/microwarp/init-warp.sh /usr/local/bin/init-warp.sh
+COPY docker/desktop/init-desktop.sh /usr/local/bin/init-desktop.sh
+COPY docker/desktop/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
+COPY docker/desktop/opencode-*.desktop /usr/share/applications/
 # xrdp + XFCE4 启动脚本和默认配置（不走 RUN heredoc 是为了避免 BuildKit
 # 解析器把"复合命令 + shell heredoc"中的 heredoc 内容误判为 Dockerfile 指令）
 COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
@@ -739,7 +742,8 @@ COPY docker/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-pane
 # Fluent 壁纸（明/暗），xfdesktop 通过 librsvg 直接渲染 SVG
 COPY docker/desktop-fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
 COPY docker/desktop-fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /etc/xrdp/startwm.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /usr/local/bin/init-desktop.sh /etc/xrdp/startwm.sh \
+    && chmod 755 /usr/local/share/opencode-desktop-launchers/opencode-*.desktop /usr/share/applications/opencode-*.desktop
 
 WORKDIR /workspace
 
