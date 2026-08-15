@@ -38,6 +38,11 @@ on:
         required: false
         default: ''
         type: string
+      codex_security_version:
+        description: 'codex-security version (e.g. 0.1.12). Leave empty to reuse saved release version.'
+        required: false
+        default: ''
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -76,14 +81,16 @@ jobs:
           INPUT_CODEX_VERSION: ${{ inputs.codex_version }}
           INPUT_SERENA_VERSION: ${{ inputs.serena_version }}
           INPUT_CLAUDE_CODE_VERSION: ${{ inputs.claude_code_version }}
+          INPUT_CODEX_SECURITY_VERSION: ${{ inputs.codex_security_version }}
         run: |
-          if [ -z "$INPUT_OPENCODE_VERSION" ] || [ -z "$INPUT_CODE_SERVER_VERSION" ] || [ -z "$INPUT_CODEX_VERSION" ] || [ -z "$INPUT_SERENA_VERSION" ] || [ -z "$INPUT_CLAUDE_CODE_VERSION" ]; then
+          if [ -z "$INPUT_OPENCODE_VERSION" ] || [ -z "$INPUT_CODE_SERVER_VERSION" ] || [ -z "$INPUT_CODEX_VERSION" ] || [ -z "$INPUT_SERENA_VERSION" ] || [ -z "$INPUT_CLAUDE_CODE_VERSION" ] || [ -z "$INPUT_CODEX_SECURITY_VERSION" ]; then
             BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
             SAVED_OPENCODE_VERSION=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
             SAVED_CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
             SAVED_CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
             SAVED_SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
             SAVED_CLAUDE_CODE_VERSION=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
+            SAVED_CODEX_SECURITY_VERSION=$(echo "$BODY" | grep -oP 'codex-security-version=\K[^\s]+' || true)
           fi
 
           # --- OpenCode 版本 ---
@@ -157,12 +164,29 @@ jobs:
           fi
           echo "Claude Code: $CC_VERSION"
 
+          # --- codex-security 版本 ---
+          if [ -n "$INPUT_CODEX_SECURITY_VERSION" ]; then
+            CXS_VERSION="$INPUT_CODEX_SECURITY_VERSION"
+            CXS_VERSION="${CXS_VERSION#npm-v}"
+            CXS_VERSION="${CXS_VERSION#v}"
+          else
+            if [ -z "$SAVED_CODEX_SECURITY_VERSION" ]; then
+              echo "codex-security version was not provided and no saved release version was found" >&2
+              exit 1
+            fi
+            CXS_VERSION="$SAVED_CODEX_SECURITY_VERSION"
+            CXS_VERSION="${CXS_VERSION#npm-v}"
+            CXS_VERSION="${CXS_VERSION#v}"
+          fi
+          echo "codex-security: $CXS_VERSION"
+
           echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
           echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
           echo "cs_version=$CS_VERSION" >> $GITHUB_OUTPUT
           echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
           echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
           echo "cc_version=$CC_VERSION" >> $GITHUB_OUTPUT
+          echo "cxs_version=$CXS_VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: check_release
@@ -191,6 +215,7 @@ jobs:
             <!-- codex-version=${{ steps.version.outputs.codex_version }} -->
             <!-- serena-version=${{ steps.version.outputs.serena_version }} -->
             <!-- claude-code-version=${{ steps.version.outputs.cc_version }} -->
+            <!-- codex-security-version=${{ steps.version.outputs.cxs_version }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -222,6 +247,7 @@ jobs:
             CODEX_VERSION=${{ steps.version.outputs.codex_version }}
             SERENA_VERSION=${{ steps.version.outputs.serena_version }}
             CLAUDE_CODE_VERSION=${{ steps.version.outputs.cc_version }}
+            CODEX_SECURITY_VERSION=${{ steps.version.outputs.cxs_version }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

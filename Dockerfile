@@ -21,7 +21,8 @@
 #   2. serena-agent  ← uv tool install，中低频
 #   3. Codex         ← npm，中频
 #   4. Claude Code   ← npm，中高频
-#   5. opencode      ← npm，最高频（用户感知最强的小版本迭代）
+#   5. codex-security ← npm，高频（0.x 早期阶段，迭代极快）
+#   6. opencode      ← npm，最高频（用户感知最强的小版本迭代）
 #
 # 拆分 npm 层后，单个 npm 包升级只重建自己一层，不影响其他 npm 包缓存。
 
@@ -33,6 +34,7 @@ ARG CODE_SERVER_VERSION=4.115.0
 ARG CODEX_VERSION=latest
 ARG SERENA_VERSION=latest
 ARG CLAUDE_CODE_VERSION=latest
+ARG CODEX_SECURITY_VERSION=latest
 
 # === 1. code-server（apt deb，中低频）===
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -58,7 +60,11 @@ RUN npm install -g @openai/codex@${CODEX_VERSION}
 # === 4. Claude Code（npm，中高频）===
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
-# === 5. opencode（最高频，必须排最后）===
+# === 5. codex-security（npm，高频）===
+# OpenAI Codex Security CLI，仅 npm 分发：https://www.npmjs.com/package/@openai/codex-security
+RUN npm install -g @openai/codex-security@${CODEX_SECURITY_VERSION}
+
+# === 6. opencode（最高频，必须排最后）===
 # rm -rf 必须与 install 在同一 RUN 内：Docker 层叠加，
 # 在新层里删除上一层添加的文件不会回收空间，必须安装+删除在同一层完成。
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \

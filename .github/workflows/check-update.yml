@@ -56,6 +56,13 @@ jobs:
           echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "Claude Code latest: $LATEST"
 
+      - name: Get codex-security latest version
+        id: codexsecurity
+        run: |
+          LATEST=$(curl -s https://registry.npmjs.org/@openai/codex-security/latest | jq -r '.version')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "codex-security latest: $LATEST"
+
       # ==========================================
       # 获取我们上次记录的版本（从 release body 提取）
       # ==========================================
@@ -69,17 +76,20 @@ jobs:
             LOCAL_CODEX=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
             LOCAL_SERENA=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
             LOCAL_CLAUDECODE=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
+            LOCAL_CODEXSECURITY=$(echo "$BODY" | grep -oP 'codex-security-version=\K[^\s]+' || true)
           fi
           echo "opencode=${LOCAL_OPENCODE:-none}" >> $GITHUB_OUTPUT
           echo "codeserver=${LOCAL_CODESERVER:-none}" >> $GITHUB_OUTPUT
           echo "codex=${LOCAL_CODEX:-none}" >> $GITHUB_OUTPUT
           echo "serena=${LOCAL_SERENA:-none}" >> $GITHUB_OUTPUT
           echo "claudecode=${LOCAL_CLAUDECODE:-none}" >> $GITHUB_OUTPUT
+          echo "codexsecurity=${LOCAL_CODEXSECURITY:-none}" >> $GITHUB_OUTPUT
           echo "Our OpenCode: ${LOCAL_OPENCODE:-none}"
           echo "Our code-server: ${LOCAL_CODESERVER:-none}"
           echo "Our Codex: ${LOCAL_CODEX:-none}"
           echo "Our serena-agent: ${LOCAL_SERENA:-none}"
           echo "Our Claude Code: ${LOCAL_CLAUDECODE:-none}"
+          echo "Our codex-security: ${LOCAL_CODEXSECURITY:-none}"
 
       # ==========================================
       # 比对版本，任意一个有更新就触发构建
@@ -144,6 +154,12 @@ jobs:
             "${{ steps.claudecode.outputs.version }}" \
             "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md"
 
+          # codex-security: 仅 npm 分发，GitHub tag 格式为 npm-v{version}
+          check_update "codex-security" \
+            "${{ steps.local.outputs.codexsecurity }}" \
+            "${{ steps.codexsecurity.outputs.version }}" \
+            "https://github.com/openai/codex-security/releases/tag/npm-v${{ steps.codexsecurity.outputs.version }}"
+
           echo "has_update=$HAS_UPDATE" >> $GITHUB_OUTPUT
 
           # 把待通知项写入文件（GITHUB_OUTPUT 不适合承载 JSON 数组）
@@ -180,7 +196,8 @@ jobs:
                 code_server_version: '${{ steps.codeserver.outputs.version }}',
                 codex_version: '${{ steps.codex.outputs.version }}',
                 serena_version: '${{ steps.serena.outputs.version }}',
-                claude_code_version: '${{ steps.claudecode.outputs.version }}'
+                claude_code_version: '${{ steps.claudecode.outputs.version }}',
+                codex_security_version: '${{ steps.codexsecurity.outputs.version }}'
               }
             });
 
