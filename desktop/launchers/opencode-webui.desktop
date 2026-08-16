@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=OpenCode
+Name[zh_CN]=OpenCode
+Comment=Open local OpenCode Web UI in Chrome
+Comment[zh_CN]=在 Chrome 中打开本地 OpenCode Web UI
+Exec=google-chrome-stable --app=http://127.0.0.1:4096
+Icon=text-html
+Terminal=false
+Categories=Development;WebDevelopment;
+StartupNotify=true

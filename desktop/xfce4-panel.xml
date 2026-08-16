@@ -50,6 +50,7 @@
         <value type="string" value="opencode-workspace.desktop"/>
         <value type="string" value="opencode-browser.desktop"/>
         <value type="string" value="opencode-code-server.desktop"/>
+        <value type="string" value="opencode-webui.desktop"/>
       </property>
     </property>
     <!-- 2: 窗口按钮（tasklist），显示当前打开的窗口，类似 Win 任务栏窗口区 -->
