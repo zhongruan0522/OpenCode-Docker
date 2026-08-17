@@ -58,7 +58,10 @@ RUN if ! command -v uv >/dev/null 2>&1; then \
 RUN npm install -g @openai/codex@${CODEX_VERSION}
 
 # === 4. Claude Code（npm，中高频）===
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+# @cometix/ccline 与 @cometix/claude-code 是 CC 的配套工具，随 CC 版本一起重建，
+# 不单独接入 check-update.yml 自动更新检测。
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    && npm install -g @cometix/ccline @cometix/claude-code
 
 # === 5. codex-security（npm，高频）===
 # OpenAI Codex Security CLI，仅 npm 分发：https://www.npmjs.com/package/@openai/codex-security
