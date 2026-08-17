@@ -21,6 +21,7 @@
 #   2. serena-agent  ← uv tool install，中低频
 #   3. Codex         ← npm，中频
 #   4. Claude Code   ← npm，中高频
+#   4.5 CC 补丁       ← agent/ccpatch/*.sh，中低频（紧跟 CC 层，CC 升级时自动对最新 cli.js 重跑）
 #   5. codex-security ← npm，高频（0.x 早期阶段，迭代极快）
 #   6. opencode      ← npm，最高频（用户感知最强的小版本迭代）
 #
@@ -63,6 +64,16 @@ RUN npm install -g @openai/codex@${CODEX_VERSION}
 # @cometix/ccline 是配套工具，随 CC 一起重建，不单独接入自动更新。
 RUN npm install -g @cometix/claude-code@${CLAUDE_CODE_VERSION} \
     && npm install -g @cometix/ccline
+
+# === 4.5 Claude Code 补丁（agent/ccpatch/，中低频）===
+# 装完 Claude Code 后自动执行 agent/ccpatch/ 下全部 *.sh 补丁脚本。
+# - 兼容性：runner 用 glob 遍历，未来新增 .sh 无需改 Dockerfile 自动生效。
+# - 容错：任一脚本失败仅告警不中断（runner 内部容错 + 外层 || true 双保险），构建不受影响。
+# - 层排序：紧跟 CC 层之后——CC 升级 → 父层 digest 变化 → 此层对最新 cli.js 自动重跑补丁。
+COPY agent/run-ccpatch.sh /usr/local/bin/run-ccpatch.sh
+COPY agent/ccpatch/ /opt/ccpatch/
+RUN chmod +x /usr/local/bin/run-ccpatch.sh \
+    && /usr/local/bin/run-ccpatch.sh || true
 
 # === 5. codex-security（npm，高频）===
 # OpenAI Codex Security CLI，仅 npm 分发：https://www.npmjs.com/package/@openai/codex-security
