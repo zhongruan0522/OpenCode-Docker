@@ -34,7 +34,7 @@ on:
         default: ''
         type: string
       claude_code_version:
-        description: 'Claude Code version (e.g. 1.0.0). Leave empty to reuse saved release version.'
+        description: 'Claude Code version (e.g. 2.1.220 or v2.1.220). Leave empty to reuse saved release version.'
         required: false
         default: ''
         type: string

@@ -52,8 +52,9 @@ jobs:
       - name: Get Claude Code latest version
         id: claudecode
         run: |
-          LATEST=$(curl -s https://registry.npmjs.org/@anthropic-ai/claude-code/latest | jq -r '.version')
-          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          LATEST=$(curl -s https://api.github.com/repos/CometixSpace/claude-code/releases/latest | jq -r '.tag_name')
+          # GitHub tag 带 v 前缀，剥离后存纯版本号
+          echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
           echo "Claude Code latest: $LATEST"
 
       - name: Get codex-security latest version
@@ -148,11 +149,11 @@ jobs:
             "${{ steps.serena.outputs.version }}" \
             "https://pypi.org/project/serena-agent/${{ steps.serena.outputs.version }}/"
 
-          # Claude Code: 仅 npm 分发，无 GitHub Release，使用仓库 CHANGELOG
+          # Claude Code: 社区 fork（CometixSpace/claude-code），GitHub tag 带 v 前缀，URL 里补回
           check_update "Claude Code" \
             "${{ steps.local.outputs.claudecode }}" \
             "${{ steps.claudecode.outputs.version }}" \
-            "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md"
+            "https://github.com/CometixSpace/claude-code/releases/tag/v${{ steps.claudecode.outputs.version }}"
 
           # codex-security: 仅 npm 分发，GitHub tag 格式为 npm-v{version}
           check_update "codex-security" \
