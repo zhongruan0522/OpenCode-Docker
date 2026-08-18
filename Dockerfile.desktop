@@ -9,7 +9,7 @@
 #
 # 层排序策略与动态层一致：更新频率从低到高排列。
 # 桌面包 apt（低频，最重）→ Sarasa 字体（低频，1.9GB 大头）
-# → Fluent 主题/图标（低频）→ desktop 用户（极少变）→ 桌面配置文件（相对高频）
+# → WhiteSur GTK 主题 / Fluent 图标（低频）→ desktop 用户（极少变）→ 桌面配置文件（相对高频）
 # ==========================================
 
 ARG BASE_IMAGE=ghcr.io/zhongruan0522/opencode-docker:base
@@ -28,8 +28,8 @@ ARG SARASA_VERSION=1.0.26
 # 颜色会被错误序列化为 @Variant(...\\x00*6) 即 RGB(0,0,0)，导致黑底黑字隐形
 # dbus-x11 + dbus + policykit-1：补齐系统总线，让 polkit/udisks2 正常工作
 # fcitx5 + fcitx5-chinese-addons + gtk3 前端提供中文输入法（XFCE 走 GTK）
-# papirus-icon-theme：保留作为兜底图标（Fluent 主题上游失效时降级显示）
-# xfce4-notifyd：Fluent 圆角通知需要的通知守护，否则 fcitx5 切换提示丑陋
+# papirus-icon-theme：保留作为兜底图标（Fluent 图标上游失效时降级显示）
+# xfce4-notifyd：圆角通知守护，否则 fcitx5 切换提示丑陋
 # 说明：fonts-noto-cjk、libgtk-3-0、xdg-utils 已在 Base 层（headless 渲染也依赖），
 # 通过层继承获得，不重复声明。
 RUN apt-get update \
@@ -58,7 +58,7 @@ RUN apt-get update \
 # ---
 # - xrdp.ini: 端口改为 3390（避免与宿主机 RDP 默认 3389 冲突），
 #             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用，
-#             登录窗口背景色对齐 Fluent 主题（ls_top_window_bg_color=0067c0）
+#             登录窗口背景色用蓝色顶条（ls_top_window_bg_color=0067c0）
 # - startwm.sh: 启动 dbus 会话总线 + fcitx5 中文输入法 + XFCE4 会话
 #   通过 COPY desktop/xrdp-startwm.sh 注入（见文件末尾 COPY 块）
 # 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
@@ -69,15 +69,15 @@ RUN sed -i \
     -e 's/^bitmap_cache=true/bitmap_cache=false/' \
     -e 's/^#\?tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' \
     /etc/xrdp/xrdp.ini \
-    # 登录窗口配色对齐 Fluent 主题（深色 #0067c0 / accent #198ee6），
-    # 默认 xrdp 是 90 年代蓝（#000000 顶 + #003366 横条），与 Fluent 桌面割裂。
+    # 登录窗口配色（蓝色顶条 #0067c0 / 浅灰底 #f0f4f9），
+    # 默认 xrdp 是 90 年代蓝（#000000 顶 + #003366 横条），与桌面割裂。
     # 值来源：xrdp wiki Login Authentication Window 章节配置项。
     && sed -i \
         -e 's/^#\?ls_top_window_bg_color=.*/ls_top_window_bg_color=0067c0/' \
         -e 's/^#\?ls_bg_color=.*/ls_bg_color=f0f4f9/' \
         -e 's/^#\?ls_logo_filename=.*/ls_logo_filename=/' \
         /etc/xrdp/xrdp.ini \
-    && echo "==> xrdp 登录界面配色已对齐 Fluent"
+    && echo "==> xrdp 登录界面配色已设置"
 
 # ---
 # 3. Sarasa Gothic 更纱字体（低频，体积大头 1.9GB）
@@ -102,26 +102,42 @@ RUN SARASA_ARCH="$(dpkg --print-architecture)" \
     && echo "==> Sarasa 字体已安装: $(ls /usr/share/fonts/truetype/sarasa/ | wc -l) files"
 
 # ---
-# 4. Fluent GTK 主题（低频）
+# 4. WhiteSur GTK 主题（低频）
 # ---
-# 参考项目 tiny_container 默认主题。包含深浅色变体、xfwm4 窗口边框、GTK3/GTK4 资源。
-RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-gtk-theme.git /tmp/fluent-gtk \
-    && cd /tmp/fluent-gtk \
-    # 安装到 /usr/share/themes（系统级），-t all 安装所有 accent 变体
-    && bash install.sh -t all -d /usr/share/themes \
-    # 校验核心主题目录确实生成（Fluent-Dark 是 xfwm4.xml 引用的主题名）
-    && if [ ! -d /usr/share/themes/Fluent-Dark ]; then \
-         echo "FATAL: /usr/share/themes/Fluent-Dark missing; install.sh layout may have changed" >&2; \
+# 参考 https://github.com/vinceliuice/WhiteSur-gtk-theme（macOS Big Sur 风格）。
+# 仓库 release/ 目录由 make-release.sh 预构建 8 个变体压缩包（含 GTK3/GTK4/xfwm4/Metacity/Cinnamon 等），
+# 直接下载解压免装 sassc/libglib2.0-dev-bin/libxml2-utils 等编译依赖，构建更快更稳。
+# 覆盖 Light/Dark × normal/solid × standard/nord 全变体。
+RUN mkdir -p /tmp/whitesur-release /usr/share/themes \
+    && for variant in \
+        WhiteSur-Light \
+        WhiteSur-Light-solid \
+        WhiteSur-Light-nord \
+        WhiteSur-Light-solid-nord \
+        WhiteSur-Dark \
+        WhiteSur-Dark-solid \
+        WhiteSur-Dark-nord \
+        WhiteSur-Dark-solid-nord \
+    ; do \
+        curl -fsSL "https://raw.githubusercontent.com/vinceliuice/WhiteSur-gtk-theme/master/release/${variant}.tar.xz" \
+            -o "/tmp/whitesur-release/${variant}.tar.xz" \
+        && tar -xf "/tmp/whitesur-release/${variant}.tar.xz" -C /usr/share/themes/ \
+        && echo "  -> ${variant} 已安装"; \
+    done \
+    # 校验核心主题目录确实生成（WhiteSur-Dark 是 xfwm4.xml / xsettings.xml 引用的主题名）
+    && if [ ! -d /usr/share/themes/WhiteSur-Dark ]; then \
+         echo "FATAL: /usr/share/themes/WhiteSur-Dark missing; release tarball layout may have changed" >&2; \
          ls /usr/share/themes/ | head -20 >&2; \
          exit 1; \
        fi \
-    && rm -rf /tmp/fluent-gtk \
-    && echo "==> Fluent GTK 主题已安装"
+    && rm -rf /tmp/whitesur-release \
+    && echo "==> WhiteSur GTK 主题已安装"
 
 # ---
-# 5. Fluent 图标主题（低频，与 GTK 主题配套）
+# 5. Fluent 图标主题（低频，作为兜底图标）
 # ---
-# 含深浅色圆角图标。
+# 含深浅色圆角图标。WhiteSur-gtk-theme 项目不提供图标，沿用 Fluent 作图标兜底
+# （vinceliuice 上游对应的 WhiteSur-icon-theme 是独立仓库，未在此切换范围内）。
 RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-icon-theme.git /tmp/fluent-icon \
     && cd /tmp/fluent-icon \
     && bash install.sh -d /usr/share/icons \
@@ -152,7 +168,7 @@ RUN useradd --create-home --shell /bin/bash --uid 10002 desktop \
 # 桌面快捷方式：同时放入应用菜单和 opencode 专用启动器目录
 COPY desktop/launchers/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
 COPY desktop/launchers/opencode-*.desktop /usr/share/applications/
-# Fluent 桌面默认配置：
+# 桌面默认配置（GTK 主题=WhiteSur，图标/壁纸=Fluent）：
 # - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
 # - xfce-desktop.xml：默认壁纸路径
 # - xfwm4.xml：窗口管理器主题、标题按钮布局

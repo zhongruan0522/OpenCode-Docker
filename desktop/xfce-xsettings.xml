@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- XFCE xsettings 默认配置：GTK 主题、图标、字体、字体渲染
-     主题：Fluent（vinceliuice/Fluent-gtk-theme，Win11 风格）
-     图标：Fluent（vinceliuice/Fluent-icon-theme）
+     主题：WhiteSur（vinceliuice/WhiteSur-gtk-theme，macOS Big Sur 风格）
+     图标：Fluent（vinceliuice/Fluent-icon-theme，作兜底；WhiteSur 图标是独立仓库未切换）
      字体：Sarasa UI SC（中英文等宽对齐，终端/编辑器友好）
      渲染：次像素 RGB + 轻微 Hinting，提升 RDP 远程显示清晰度
 
@@ -20,7 +20,7 @@
 <channel name="xsettings" version="1.0">
   <property name="Net" type="empty">
     <!-- GTK 主题名（XSETTINGS 规范位置：Net/ThemeName，必须在 /Net/ 下） -->
-    <property name="ThemeName" type="string" value="Fluent-Dark"/>
+    <property name="ThemeName" type="string" value="WhiteSur-Dark"/>
     <!-- 图标主题名（同上，必须在 /Net/ 下） -->
     <property name="IconThemeName" type="string" value="Fluent"/>
     <!-- 回退声音主题沿用 freedesktop，避免 GTK 应用查找声音主题时报错。 -->

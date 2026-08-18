@@ -30,8 +30,7 @@
   <!-- 所有插件的实例声明：plugin-N 的 value 是插件内部类型名 -->
   <property name="plugins" type="empty">
     <!-- 1: Whisker Menu（开始菜单本体，xfce4-whiskermenu-plugin 提供）。
-         tiny_container 的桌面来自容器内 XFCE + Fluent 主题，这里用系统级
-         .desktop 启动项预置常用入口，避免首次登录后菜单空洞。 -->
+         这里用系统级 .desktop 启动项预置常用入口，避免首次登录后菜单空洞。 -->
     <property name="plugin-1" type="string" value="whiskermenu">
       <property name="button-icon" type="string" value="start-here-symbolic"/>
       <property name="button-title" type="string" value="开始"/>
@@ -80,7 +79,7 @@
     <!-- 5: 系统托盘（systray），收纳 fcitx5 输入法、通知图标等 -->
     <property name="plugin-5" type="string" value="systray">
       <property name="square-icons" type="bool" value="true"/>
-      <!-- square-icons=正方形图标，对齐 Fluent 视觉 -->
+      <!-- square-icons=正方形图标，统一托盘视觉 -->
     </property>
     <!-- 6: 时钟，Win11 风格 24 小时制 + 月日 -->
     <property name="plugin-6" type="string" value="clock">
