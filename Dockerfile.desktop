@@ -51,6 +51,7 @@ RUN apt-get update \
         fcitx5-frontend-gtk3 \
         fcitx5-chinese-addons \
         plank \
+        dconf-cli \
         papirus-icon-theme \
     && usermod -aG ssl-cert xrdp \
     && rm -rf /var/lib/apt/lists/*
