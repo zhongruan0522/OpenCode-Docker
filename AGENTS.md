@@ -5,7 +5,7 @@
 本项目使用三层 Docker 镜像构建（自底向上）：
 
 1. **Base 层**（`Dockerfile.base` → `:base`）：仅存放稳定、低频变动的组件（工具链、运行时库、全局 npm/Python 包、Playwright 浏览器等），月级变动。
-2. **桌面层**（`Dockerfile.desktop` → `:desktop`）：xrdp/XFCE4 远程桌面、Sarasa 字体、Fluent 主题、desktop 用户及桌面配置，周级变动。`FROM :base`。
+2. **桌面层**（`Dockerfile.desktop` → `:desktop`）：xrdp/XFCE4 远程桌面、Sarasa 字体、WhiteSur 主题（GTK/图标/壁纸）、desktop 用户及桌面配置，周级变动。`FROM :base`。
 3. **动态层**（`Dockerfile` → release tag）：仅包含绑定了自动更新检测（`check-update.yml`）的版本类组件，天级变动。`FROM :desktop`。
 
 在新加入依赖的时候，如果用户没说放入哪层，则按性质判断：纯桌面视觉/远程桌面组件放桌面层，其余默认放入 Base 层。

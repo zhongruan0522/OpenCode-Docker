@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- XFCE 桌面（xfdesktop）默认配置
-     壁纸：Fluent 配色 SVG（暗色），位于 /usr/share/backgrounds/fluent/
+     壁纸：WhiteSur 4k JPG（暗色），位于 /usr/share/backgrounds/whitesur/
      图标大小：默认 48px，文字白色描边（深色壁纸可读）
      单工作区模式：跟随 xfwm4 workspace_count -->
 <channel name="xfce4-desktop" version="1">
@@ -12,7 +12,7 @@
           <property name="value1" type="int" value="0"/>
           <property name="value2" type="int" value="0"/>
         </property>
-        <property name="image-path" type="string" value="/usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg"/>
+        <property name="image-path" type="string" value="/usr/share/backgrounds/whitesur/whitesur-wallpaper-dark.jpg"/>
         <property name="image-show" type="bool" value="true"/>
         <!-- 拉伸模式：scaled（保持比例填充），其他选项 centered/tiled/stretched -->
         <property name="image-style" type="int" value="3"/>
@@ -30,7 +30,7 @@
           <property name="value1" type="int" value="0"/>
           <property name="value2" type="int" value="0"/>
         </property>
-        <property name="image-path" type="string" value="/usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg"/>
+        <property name="image-path" type="string" value="/usr/share/backgrounds/whitesur/whitesur-wallpaper-dark.jpg"/>
         <property name="image-show" type="bool" value="true"/>
         <property name="image-style" type="int" value="3"/>
         <property name="color-style" type="int" value="0"/>

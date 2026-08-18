@@ -546,7 +546,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     && apt-get install -y --no-install-recommends docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin iptables \
     && rm -rf /var/lib/apt/lists/*
 
-# xrdp 配置、Sarasa 字体、Fluent 主题等桌面组件已拆分至 Dockerfile.desktop（桌面层）。
+# xrdp 配置、Sarasa 字体、WhiteSur 主题等桌面组件已拆分至 Dockerfile.desktop（桌面层）。
 
 # 创建架构无关的 JAVA_HOME 符号链接（JDK 17 + JDK 21 共存，默认 21）
 # UnifyNook Android 要求 sourceCompatibility VERSION_21，默认指向 JDK 21

@@ -9,7 +9,7 @@
 #
 # 层排序策略与动态层一致：更新频率从低到高排列。
 # 桌面包 apt（低频，最重）→ Sarasa 字体（低频，1.9GB 大头）
-# → WhiteSur GTK 主题 / Fluent 图标（低频）→ desktop 用户（极少变）→ 桌面配置文件（相对高频）
+# → WhiteSur GTK 主题 / 图标 / 壁纸（低频）→ desktop 用户（极少变）→ 桌面配置文件（相对高频）
 # ==========================================
 
 ARG BASE_IMAGE=ghcr.io/zhongruan0522/opencode-docker:base
@@ -28,7 +28,7 @@ ARG SARASA_VERSION=1.0.26
 # 颜色会被错误序列化为 @Variant(...\\x00*6) 即 RGB(0,0,0)，导致黑底黑字隐形
 # dbus-x11 + dbus + policykit-1：补齐系统总线，让 polkit/udisks2 正常工作
 # fcitx5 + fcitx5-chinese-addons + gtk3 前端提供中文输入法（XFCE 走 GTK）
-# papirus-icon-theme：保留作为兜底图标（Fluent 图标上游失效时降级显示）
+# papirus-icon-theme：保留作为兜底图标（WhiteSur 图标上游失效时降级显示）
 # xfce4-notifyd：圆角通知守护，否则 fcitx5 切换提示丑陋
 # 说明：fonts-noto-cjk、libgtk-3-0、xdg-utils 已在 Base 层（headless 渲染也依赖），
 # 通过层继承获得，不重复声明。
@@ -134,24 +134,43 @@ RUN mkdir -p /tmp/whitesur-release /usr/share/themes \
     && echo "==> WhiteSur GTK 主题已安装"
 
 # ---
-# 5. Fluent 图标主题（低频，作为兜底图标）
+# 5. WhiteSur 图标主题（低频，与 GTK 主题配套）
 # ---
-# 含深浅色圆角图标。WhiteSur-gtk-theme 项目不提供图标，沿用 Fluent 作图标兜底
-# （vinceliuice 上游对应的 WhiteSur-icon-theme 是独立仓库，未在此切换范围内）。
-RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-icon-theme.git /tmp/fluent-icon \
-    && cd /tmp/fluent-icon \
+# 参考 https://github.com/vinceliuice/WhiteSur-icon-theme（macOS Big Sur 风格图标）。
+# Releases 无预构建 assets，沿用 git clone + install.sh 模式。
+# 默认安装 3 色变体：WhiteSur / WhiteSur-light / WhiteSur-dark（默认蓝色 accent）。
+RUN git clone --depth 1 https://github.com/vinceliuice/WhiteSur-icon-theme.git /tmp/whitesur-icon \
+    && cd /tmp/whitesur-icon \
     && bash install.sh -d /usr/share/icons \
-    # 校验图标主题索引确实生成
-    && if [ ! -f /usr/share/icons/Fluent/index.theme ]; then \
-         echo "FATAL: /usr/share/icons/Fluent/index.theme missing" >&2; \
+    # 校验核心图标主题目录确实生成（WhiteSur-dark 是 xfce-desktop.xml 引用的图标主题名）
+    && if [ ! -f /usr/share/icons/WhiteSur-dark/index.theme ]; then \
+         echo "FATAL: /usr/share/icons/WhiteSur-dark/index.theme missing" >&2; \
          ls /usr/share/icons/ | head -20 >&2; \
          exit 1; \
        fi \
-    && rm -rf /tmp/fluent-icon \
-    && echo "==> Fluent 图标主题已安装"
+    && rm -rf /tmp/whitesur-icon \
+    && echo "==> WhiteSur 图标主题已安装"
 
 # ---
-# 6. desktop 用户（极少变动）
+# 6. WhiteSur 壁纸（低频，与 GTK 主题配套）
+# ---
+# 参考 https://github.com/vinceliuice/WhiteSur-wallpapers。
+# 上游 4k JPG 直接拉取（不使用 install-wallpapers.sh，避免装满 4 套 × 3 色 × 3 分辨率 = 36 个文件）。
+# 仅取 WhiteSur-dark.jpg（与 GTK Dark 主题配套）和 WhiteSur-light.jpg（备用，便于用户切换）。
+RUN mkdir -p /usr/share/backgrounds/whitesur \
+    && curl -fsSL "https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-dark.jpg" \
+        -o /usr/share/backgrounds/whitesur/whitesur-wallpaper-dark.jpg \
+    && curl -fsSL "https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg" \
+        -o /usr/share/backgrounds/whitesur/whitesur-wallpaper-light.jpg \
+    # 校验文件确实下载成功（非零大小）
+    && if [ ! -s /usr/share/backgrounds/whitesur/whitesur-wallpaper-dark.jpg ]; then \
+         echo "FATAL: whitesur-wallpaper-dark.jpg missing or empty" >&2; \
+         exit 1; \
+       fi \
+    && echo "==> WhiteSur 壁纸已安装"
+
+# ---
+# 7. desktop 用户（极少变动）
 # ---
 # 独立日常账号（可 sudo），作为推荐 RDP 登录账号。
 # 必须在 app 用户/组创建之后执行：usermod -aG app desktop 依赖 app 组已存在（app 组在 Base 层创建）。
@@ -163,12 +182,12 @@ RUN useradd --create-home --shell /bin/bash --uid 10002 desktop \
     && chmod 440 /etc/sudoers.d/desktop
 
 # ---
-# 7. 桌面环境配置 / 资源 / 快捷方式（desktop/，相对高频，放最后）
+# 8. 桌面环境配置 / 资源 / 快捷方式（desktop/，相对高频，放最后）
 # ---
 # 桌面快捷方式：同时放入应用菜单和 opencode 专用启动器目录
 COPY desktop/launchers/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
 COPY desktop/launchers/opencode-*.desktop /usr/share/applications/
-# 桌面默认配置（GTK 主题=WhiteSur，图标/壁纸=Fluent）：
+# 桌面默认配置（GTK 主题=WhiteSur-Dark，图标=WhiteSur-dark，壁纸=WhiteSur-dark）：
 # - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
 # - xfce-desktop.xml：默认壁纸路径
 # - xfwm4.xml：窗口管理器主题、标题按钮布局
@@ -179,12 +198,10 @@ COPY desktop/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsetti
 COPY desktop/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 COPY desktop/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
 COPY desktop/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
-# Fluent 壁纸（明/暗），xfdesktop 通过 librsvg 直接渲染 SVG
-COPY desktop/fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
-COPY desktop/fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
+# 壁纸由第 6 段 curl 安装到 /usr/share/backgrounds/whitesur/（JPG 二进制不放仓库）
 
 # ---
-# 8. 桌面启动脚本（desktop/ 中的桌面专属部分）
+# 9. 桌面启动脚本（desktop/ 中的桌面专属部分）
 # ---
 # init-desktop.sh：entrypoint 在 ENABLE_DESKTOP=1 时调用的 root 级桌面引导
 # xrdp-startwm.sh：xrdp 会话启动脚本（dbus + fcitx5 + XFCE4）
