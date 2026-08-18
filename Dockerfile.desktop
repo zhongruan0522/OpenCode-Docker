@@ -1,0 +1,179 @@
+# syntax=docker/dockerfile:1
+
+# ==========================================
+# 桌面层镜像：xrdp + XFCE4 远程桌面环境
+# FROM 基础镜像（ghcr.io/zhongruan0522/opencode-docker:base）
+# 仅在桌面组件（xrdp/XFCE/主题/字体/桌面配置）变动时重建，
+# Base 层完全复用缓存；本层被动态层（Dockerfile）FROM 引用。
+# CI 推送到 ghcr.io/zhongruan0522/opencode-docker:desktop
+#
+# 层排序策略与动态层一致：更新频率从低到高排列。
+# 桌面包 apt（低频，最重）→ Sarasa 字体（低频，1.9GB 大头）
+# → Fluent 主题/图标（低频）→ desktop 用户（极少变）→ 桌面配置文件（相对高频）
+# ==========================================
+
+ARG BASE_IMAGE=ghcr.io/zhongruan0522/opencode-docker:base
+FROM ${BASE_IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG SARASA_VERSION=1.0.26
+
+# ---
+# 1. 桌面 apt 包（xrdp + XFCE4 + 中文输入法，最低频最重层）
+# ---
+# xrdp/xorgxrdp 提供 RDP 协议接入，xfwm4 是 XFCE 默认窗口管理器
+# XFCE4 是 GTK 实现的成熟轻量桌面环境，对 xrdp 容器场景支持最好
+# （linuxserver/webtop、dorowu/ubuntu-desktop 等都选用 XFCE）
+# 不用 LXQt 的原因：lxqt-panel 在无系统 D-Bus 容器里首次生成的 panel.conf
+# 颜色会被错误序列化为 @Variant(...\\x00*6) 即 RGB(0,0,0)，导致黑底黑字隐形
+# dbus-x11 + dbus + policykit-1：补齐系统总线，让 polkit/udisks2 正常工作
+# fcitx5 + fcitx5-chinese-addons + gtk3 前端提供中文输入法（XFCE 走 GTK）
+# papirus-icon-theme：保留作为兜底图标（Fluent 主题上游失效时降级显示）
+# xfce4-notifyd：Fluent 圆角通知需要的通知守护，否则 fcitx5 切换提示丑陋
+# 说明：fonts-noto-cjk、libgtk-3-0、xdg-utils 已在 Base 层（headless 渲染也依赖），
+# 通过层继承获得，不重复声明。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        xrdp \
+        xorgxrdp \
+        xfce4 \
+        xfce4-terminal \
+        xfce4-whiskermenu-plugin \
+        xfce4-clipman-plugin \
+        xfce4-screenshooter \
+        xfce4-notifyd \
+        thunar \
+        dbus \
+        dbus-x11 \
+        policykit-1 \
+        fcitx5 \
+        fcitx5-frontend-gtk3 \
+        fcitx5-chinese-addons \
+        papirus-icon-theme \
+    && usermod -aG ssl-cert xrdp \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---
+# 2. xrdp 配置（低频）
+# ---
+# - xrdp.ini: 端口改为 3390（避免与宿主机 RDP 默认 3389 冲突），
+#             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用，
+#             登录窗口背景色对齐 Fluent 主题（ls_top_window_bg_color=0067c0）
+# - startwm.sh: 启动 dbus 会话总线 + fcitx5 中文输入法 + XFCE4 会话
+#   通过 COPY docker/xrdp-startwm.sh 注入（见文件末尾 COPY 块）
+# 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
+RUN sed -i \
+    -e 's/^port=3389/port=3390/' \
+    -e 's/^max_bpp=32/max_bpp=24/' \
+    -e 's/^crypt_level=high/crypt_level=client/' \
+    -e 's/^bitmap_cache=true/bitmap_cache=false/' \
+    -e 's/^#\?tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' \
+    /etc/xrdp/xrdp.ini \
+    # 登录窗口配色对齐 Fluent 主题（深色 #0067c0 / accent #198ee6），
+    # 默认 xrdp 是 90 年代蓝（#000000 顶 + #003366 横条），与 Fluent 桌面割裂。
+    # 值来源：xrdp wiki Login Authentication Window 章节配置项。
+    && sed -i \
+        -e 's/^#\?ls_top_window_bg_color=.*/ls_top_window_bg_color=0067c0/' \
+        -e 's/^#\?ls_bg_color=.*/ls_bg_color=f0f4f9/' \
+        -e 's/^#\?ls_logo_filename=.*/ls_logo_filename=/' \
+        /etc/xrdp/xrdp.ini \
+    && echo "==> xrdp 登录界面配色已对齐 Fluent"
+
+# ---
+# 3. Sarasa Gothic 更纱字体（低频，体积大头 1.9GB）
+# ---
+# 中英文等宽对齐的现代中文字体（1cjk=2ascii），终端/编辑器友好。
+# Debian bookworm 仓库版本较旧且只有部分子集，直接从 GitHub releases 取固定版本。
+# 覆盖 Sarasa UI/Mono/Fixed/Term/Gothic/Slab 全族 SC（简体）子集。
+RUN SARASA_ARCH="$(dpkg --print-architecture)" \
+    && case "${SARASA_ARCH}" in amd64|arm64) ;; *) echo "Unsupported sarasa arch: ${SARASA_ARCH}" >&2; exit 1 ;; esac \
+    && mkdir -p /usr/share/fonts/truetype/sarasa /tmp/sarasa \
+    && curl -fsSL "https://github.com/be5invis/Sarasa-Gothic/releases/download/v${SARASA_VERSION}/Sarasa-TTF-${SARASA_VERSION}.7z" -o /tmp/sarasa/sarasa.7z \
+    && 7z x -y /tmp/sarasa/sarasa.7z -o/tmp/sarasa >/dev/null \
+    # 只保留 SC（简体）子集，避免装全 11 个 cjk 变体撑爆层（200MB+）
+    && mv /tmp/sarasa/Sarasa*SC*.ttf /usr/share/fonts/truetype/sarasa/ \
+    # 校验：若没装上任何字体，立刻失败而非静默通过
+    && if [ -z "$(ls /usr/share/fonts/truetype/sarasa/*.ttf 2>/dev/null)" ]; then \
+         echo "FATAL: no Sarasa SC ttf installed; release asset layout may have changed" >&2; \
+         exit 1; \
+       fi \
+    && rm -rf /tmp/sarasa \
+    && fc-cache -f /usr/share/fonts/truetype/sarasa \
+    && echo "==> Sarasa 字体已安装: $(ls /usr/share/fonts/truetype/sarasa/ | wc -l) files"
+
+# ---
+# 4. Fluent GTK 主题（低频）
+# ---
+# 参考项目 tiny_container 默认主题。包含深浅色变体、xfwm4 窗口边框、GTK3/GTK4 资源。
+RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-gtk-theme.git /tmp/fluent-gtk \
+    && cd /tmp/fluent-gtk \
+    # 安装到 /usr/share/themes（系统级），-t all 安装所有 accent 变体
+    && bash install.sh -t all -d /usr/share/themes \
+    # 校验核心主题目录确实生成（Fluent-Dark 是 xfwm4.xml 引用的主题名）
+    && if [ ! -d /usr/share/themes/Fluent-Dark ]; then \
+         echo "FATAL: /usr/share/themes/Fluent-Dark missing; install.sh layout may have changed" >&2; \
+         ls /usr/share/themes/ | head -20 >&2; \
+         exit 1; \
+       fi \
+    && rm -rf /tmp/fluent-gtk \
+    && echo "==> Fluent GTK 主题已安装"
+
+# ---
+# 5. Fluent 图标主题（低频，与 GTK 主题配套）
+# ---
+# 含深浅色圆角图标。
+RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-icon-theme.git /tmp/fluent-icon \
+    && cd /tmp/fluent-icon \
+    && bash install.sh -d /usr/share/icons \
+    # 校验图标主题索引确实生成
+    && if [ ! -f /usr/share/icons/Fluent/index.theme ]; then \
+         echo "FATAL: /usr/share/icons/Fluent/index.theme missing" >&2; \
+         ls /usr/share/icons/ | head -20 >&2; \
+         exit 1; \
+       fi \
+    && rm -rf /tmp/fluent-icon \
+    && echo "==> Fluent 图标主题已安装"
+
+# ---
+# 6. desktop 用户（极少变动）
+# ---
+# 独立日常账号（可 sudo），作为推荐 RDP 登录账号。
+# 必须在 app 用户/组创建之后执行：usermod -aG app desktop 依赖 app 组已存在（app 组在 Base 层创建）。
+# 密码在 entrypoint.sh 运行时由 DESKTOP_USER_PASSWORD/DESKTOP_PASSWORD 注入，这里仅建账户。
+# uid=10002 固定，entrypoint 的 LOCAL_UID 调整逻辑只针对 app，不会动 desktop，保证桌面登录始终是普通权限。
+RUN useradd --create-home --shell /bin/bash --uid 10002 desktop \
+    && usermod -aG app desktop \
+    && echo 'desktop ALL=(ALL:ALL) ALL' > /etc/sudoers.d/desktop \
+    && chmod 440 /etc/sudoers.d/desktop
+
+# ---
+# 7. 桌面环境配置 / 资源 / 快捷方式（desktop/，相对高频，放最后）
+# ---
+# 桌面快捷方式：同时放入应用菜单和 opencode 专用启动器目录
+COPY desktop/launchers/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
+COPY desktop/launchers/opencode-*.desktop /usr/share/applications/
+# Fluent 桌面默认配置：
+# - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
+# - xfce-desktop.xml：默认壁纸路径
+# - xfwm4.xml：窗口管理器主题、标题按钮布局
+# - xfce4-panel.xml：任务栏位置/插件顺序（底部 48px + whiskermenu + tasklist + 托盘 + 时钟）
+#   缺它则 xfce4-panel 首启用 hardcoded 默认值（顶部 panel + 老 applicationsmenu），
+#   表现为"开始菜单在最顶上 + 桌面细节不对齐"——这是登录后视觉割裂的根因。
+COPY desktop/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
+COPY desktop/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+COPY desktop/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+COPY desktop/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+# Fluent 壁纸（明/暗），xfdesktop 通过 librsvg 直接渲染 SVG
+COPY desktop/fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
+COPY desktop/fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
+
+# ---
+# 8. 桌面启动脚本（docker/ 中的桌面专属部分）
+# ---
+# init-desktop.sh：entrypoint 在 ENABLE_DESKTOP=1 时调用的 root 级桌面引导
+# xrdp-startwm.sh：xrdp 会话启动脚本（dbus + fcitx5 + XFCE4）
+COPY docker/init-desktop.sh /usr/local/bin/init-desktop.sh
+COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
+
+RUN chmod +x /usr/local/bin/init-desktop.sh /etc/xrdp/startwm.sh \
+    && chmod 755 /usr/local/share/opencode-desktop-launchers/opencode-*.desktop /usr/share/applications/opencode-*.desktop

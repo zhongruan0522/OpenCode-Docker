@@ -6,6 +6,7 @@ on:
   workflow_run:
     workflows:
       - Build Base Image
+      - Build Desktop Image
       - Build and Push Docker Image
     types:
       - completed
@@ -39,6 +40,9 @@ jobs:
           case "$WF_NAME" in
             "Build Base Image")
               echo "layer=Base" >> $GITHUB_OUTPUT
+              ;;
+            "Build Desktop Image")
+              echo "layer=桌面" >> $GITHUB_OUTPUT
               ;;
             "Build and Push Docker Image")
               echo "layer=动态" >> $GITHUB_OUTPUT

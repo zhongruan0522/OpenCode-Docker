@@ -519,100 +519,24 @@ RUN dpkg --add-architecture i386 \
         wine32 \
         mono-complete \
         nsis \
-        # 远程桌面 (xrdp + XFCE4)
-        # XFCE4 是 GTK 实现的成熟轻量桌面环境，对 xrdp 容器场景支持最好
-        # （linuxserver/webtop、dorowu/ubuntu-desktop 等都选用 XFCE）
-        # 不用 LXQt 的原因：lxqt-panel 在无系统 D-Bus 容器里首次生成的 panel.conf
-        # 颜色会被错误序列化为 @Variant(...\\x00*6) 即 RGB(0,0,0)，导致黑底黑字隐形
-        # xrdp/xorgxrdp 提供 RDP 协议接入，xfwm4 是 XFCE 默认窗口管理器
-        # dbus-x11 + dbus + policykit-1：补齐系统总线，让 polkit/udisks2 正常工作
-        # fcitx5 + fcitx5-chinese-addons + gtk3 前端提供中文输入法（XFCE 走 GTK）
-        # papirus-icon-theme：保留作为兜底图标（Fluent 主题上游失效时降级显示）
-        # fonts-sarasa-gothic：更纱 Gothic，中英文等宽对齐，1cjk=2ascii，终端/编辑器友好
-        # xfce4-notifyd：Fluent 圆角通知需要的通知守护，否则 fcitx5 切换提示丑陋
-        xrdp \
-        xorgxrdp \
-        xfce4 \
-        xfce4-terminal \
-        xfce4-whiskermenu-plugin \
-        xfce4-clipman-plugin \
-        xfce4-screenshooter \
-        xfce4-notifyd \
-        thunar \
-        dbus \
-        dbus-x11 \
-        policykit-1 \
-        fcitx5 \
-        fcitx5-frontend-gtk3 \
-        fcitx5-chinese-addons \
-        papirus-icon-theme \
-    && usermod -aG ssl-cert xrdp \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
+# 说明：xrdp/XFCE4/fcitx5 等远程桌面组件已拆分至 Dockerfile.desktop（桌面层），
+# 此处仅保留 headless 场景（Playwright MCP / LibreOffice / Anything Analyzer）所需的 GUI 运行库。
 
 # Google Chrome Stable（日常浏览用，与 Playwright bundled Chromium 分离）
 # 同时被 Playwright MCP 通过 channel="chrome" 复用（见 entrypoint.sh: PLAYWRIGHT_MCP_BROWSER=chrome）。
 # Playwright bundled Chromium 仍保留，供 Python playwright 及回归测试用。
 # 必须装在最终镜像阶段：Chrome 是完整 apt 包（/usr/bin/google-chrome + /opt/google/chrome + 桌面图标），
 # 不能像 gh CLI 那样靠单二进制 COPY --from=builder 搬运。
+# 归属 Base 层：Playwright MCP headless 运行时依赖，桌面层缺失时不影响核心功能。
 RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
     && chmod go+r /usr/share/keyrings/google-chrome.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google-chrome.list > /dev/null \
     && apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
-
-# Sarasa Gothic 更纱字体（中英文等宽对齐的现代中文字体）
-# Debian bookworm 仓库版本较旧且只有部分子集，这里直接从 GitHub releases 取最新固定版本。
-# 字体覆盖：Sarasa UI/Mono/Term + 简中（SC），终端、UI、文档全场景适用。
-# 单独成层便于版本升级，约 +60MB。
-ARG SARASA_VERSION=1.0.26
-RUN SARASA_ARCH="$(dpkg --print-architecture)" \
-    && case "${SARASA_ARCH}" in amd64|arm64) ;; *) echo "Unsupported sarasa arch: ${SARASA_ARCH}" >&2; exit 1 ;; esac \
-    && mkdir -p /usr/share/fonts/truetype/sarasa /tmp/sarasa \
-    && curl -fsSL "https://github.com/be5invis/Sarasa-Gothic/releases/download/v${SARASA_VERSION}/Sarasa-TTF-${SARASA_VERSION}.7z" -o /tmp/sarasa/sarasa.7z \
-    && 7z x -y /tmp/sarasa/sarasa.7z -o/tmp/sarasa >/dev/null \
-    # 只保留 SC（简体）子集，避免装全 11 个 cjk 变体撑爆层（200MB+）
-    && mv /tmp/sarasa/Sarasa*SC*.ttf /usr/share/fonts/truetype/sarasa/ \
-    # 校验：若没装上任何字体，立刻失败而非静默通过
-    && if [ -z "$(ls /usr/share/fonts/truetype/sarasa/*.ttf 2>/dev/null)" ]; then \
-         echo "FATAL: no Sarasa SC ttf installed; release asset layout may have changed" >&2; \
-         exit 1; \
-       fi \
-    && rm -rf /tmp/sarasa \
-    && fc-cache -f /usr/share/fonts/truetype/sarasa \
-    && echo "==> Sarasa 字体已安装: $(ls /usr/share/fonts/truetype/sarasa/ | wc -l) files"
-
-# Fluent GTK 主题（vinceliuice/Fluent-gtk-theme，Win11 风格）
-# 参考项目 tiny_container 默认主题。包含深浅色变体、xfwm4 窗口边框、GTK3/GTK4 资源。
-# 仓库无 release tag，按 commit 拉取（约 +30MB）。
-RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-gtk-theme.git /tmp/fluent-gtk \
-    && cd /tmp/fluent-gtk \
-    # 安装到 /usr/share/themes（系统级），-t all 安装所有 accent 变体
-    && bash install.sh -t all -d /usr/share/themes \
-    # 校验核心主题目录确实生成（Fluent-Dark 是 xfwm4.xml 引用的主题名）
-    && if [ ! -d /usr/share/themes/Fluent-Dark ]; then \
-         echo "FATAL: /usr/share/themes/Fluent-Dark missing; install.sh layout may have changed" >&2; \
-         ls /usr/share/themes/ | head -20 >&2; \
-         exit 1; \
-       fi \
-    && rm -rf /tmp/fluent-gtk \
-    && echo "==> Fluent GTK 主题已安装"
-
-# Fluent 图标主题（vinceliuice/Fluent-icon-theme，与 GTK 主题配套）
-# 含深浅色圆角图标，约 +100MB。
-RUN git clone --depth 1 https://github.com/vinceliuice/Fluent-icon-theme.git /tmp/fluent-icon \
-    && cd /tmp/fluent-icon \
-    && bash install.sh -d /usr/share/icons \
-    # 校验图标主题索引确实生成
-    && if [ ! -f /usr/share/icons/Fluent/index.theme ]; then \
-         echo "FATAL: /usr/share/icons/Fluent/index.theme missing" >&2; \
-         ls /usr/share/icons/ | head -20 >&2; \
-         exit 1; \
-       fi \
-    && rm -rf /tmp/fluent-icon \
-    && echo "==> Fluent 图标主题已安装"
 
 # Docker CE（DinD 模式）
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg \
@@ -622,36 +546,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     && apt-get install -y --no-install-recommends docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin iptables \
     && rm -rf /var/lib/apt/lists/*
 
-# xrdp 配置
-# - xrdp.ini: 端口改为 3390（避免与宿主机 RDP 默认 3389 冲突），
-#             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用，
-#             登录窗口背景色对齐 Fluent 主题（ls_top_window_bg_color=0067c0）
-# - startwm.sh: 启动 dbus 会话总线 + fcitx5 中文输入法 + XFCE4 会话
-#   通过 COPY docker/xrdp-startwm.sh 注入（见文件末尾 COPY 块）
-# - xsettings.xml: GTK/图标主题设为 Fluent，字体设为 Sarasa UI SC
-# - xfwm4.xml: 窗口管理器主题设为 Fluent-Dark，按钮布局对齐 Win11
-# - xfce-desktop.xml: 默认壁纸设为 Fluent 配色 SVG
-#   三个 xfconf 文件均通过文件末尾 COPY 块注入
-# 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
-# 注意：不要在 RUN 里用 `cmd1 && cmd2 <<EOF ... EOF` 这种"复合命令 + shell heredoc"形式，
-#       BuildKit 的 Dockerfile 解析器会把 heredoc 后续行当成新 Dockerfile 指令报
-#       "unknown instruction"。大段配置文件统一通过 COPY 注入（见文件末尾）。
-RUN sed -i \
-    -e 's/^port=3389/port=3390/' \
-    -e 's/^max_bpp=32/max_bpp=24/' \
-    -e 's/^crypt_level=high/crypt_level=client/' \
-    -e 's/^bitmap_cache=true/bitmap_cache=false/' \
-    -e 's/^#\?tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' \
-    /etc/xrdp/xrdp.ini \
-    # 登录窗口配色对齐 Fluent 主题（深色 #0067c0 / accent #198ee6），
-    # 默认 xrdp 是 90 年代蓝（#000000 顶 + #003366 横条），与 Fluent 桌面割裂。
-    # 值来源：xrdp wiki Login Authentication Window 章节配置项。
-    && sed -i \
-        -e 's/^#\?ls_top_window_bg_color=.*/ls_top_window_bg_color=0067c0/' \
-        -e 's/^#\?ls_bg_color=.*/ls_bg_color=f0f4f9/' \
-        -e 's/^#\?ls_logo_filename=.*/ls_logo_filename=/' \
-        /etc/xrdp/xrdp.ini \
-    && echo "==> xrdp 登录界面配色已对齐 Fluent"
+# xrdp 配置、Sarasa 字体、Fluent 主题等桌面组件已拆分至 Dockerfile.desktop（桌面层）。
 
 # 创建架构无关的 JAVA_HOME 符号链接（JDK 17 + JDK 21 共存，默认 21）
 # UnifyNook Android 要求 sourceCompatibility VERSION_21，默认指向 JDK 21
@@ -689,21 +584,13 @@ ENV PNPM_HOME="/home/app/.local/share/pnpm" \
 # 用户和目录
 # /workspace 同时让 app 组可读写执行（desktop 已加入 app 组），保证两个用户都能访问代码工作区。
 # 组写权限通过 chmod g+rwx + setgid 实现：setgid 让 /workspace 下新建子目录继承组而非创建者主组。
+# desktop 用户及其家目录由桌面层（Dockerfile.desktop）的 useradd --create-home 创建。
 RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash --uid 10001 app; fi \
     && mkdir -p /workspace /home/app/.config/opencode /home/app/.config/code-server \
                /home/app/.cache /home/app/.local/share/code-server /etc/wireguard \
                "${PNPM_HOME}" /home/app/go \
     && chown -R app:app /home/app /workspace \
     && chmod g+rwx /workspace && chmod g+s /workspace
-
-# desktop 用户（独立日常账号，可 sudo），作为推荐 RDP 登录账号
-# 必须在 app 用户/组创建之后执行：usermod -aG app desktop 依赖 app 组已存在。
-# 密码在 entrypoint.sh 运行时由 DESKTOP_USER_PASSWORD/DESKTOP_PASSWORD 注入，这里仅建账户。
-# uid=10002 固定，entrypoint 的 LOCAL_UID 调整逻辑只针对 app，不会动 desktop，保证桌面登录始终是普通权限。
-RUN useradd --create-home --shell /bin/bash --uid 10002 desktop \
-    && usermod -aG app desktop \
-    && echo 'desktop ALL=(ALL:ALL) ALL' > /etc/sudoers.d/desktop \
-    && chmod 440 /etc/sudoers.d/desktop
 
 # 从 builder 复制所有构建产物，较大的 app 可写目录在 COPY 阶段直接设置 ownership，避免后续递归 chown 生成额外大层。
 COPY --from=builder /usr/local /usr/local
@@ -718,36 +605,15 @@ RUN bash /tmp/preload-go-modules.sh \
     && chown -R app:app /home/app/go \
     && rm -f /tmp/preload-go-modules.sh
 
-# === 容器启动 / 进程管理脚本（docker/） ===
+# === 容器启动 / 进程管理脚本（docker/，仅 Base 归属部分） ===
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/init-warp.sh /usr/local/bin/init-warp.sh
-COPY docker/init-desktop.sh /usr/local/bin/init-desktop.sh
-# xrdp 启动会话脚本（不走 RUN heredoc 是为了避免 BuildKit
-# 解析器把"复合命令 + shell heredoc"中的 heredoc 内容误判为 Dockerfile 指令）
-COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
+# init-desktop.sh / xrdp-startwm.sh 归桌面层（Dockerfile.desktop），此处不再 COPY。
+# 桌面环境配置/资源（desktop/**）同样归桌面层。
 
-# === 桌面环境配置 / 资源 / 快捷方式（desktop/） ===
-# 桌面快捷方式：同时放入应用菜单和 opencode 专用启动器目录
-COPY desktop/launchers/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
-COPY desktop/launchers/opencode-*.desktop /usr/share/applications/
-# Fluent 桌面默认配置：
-# - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
-# - xfce-desktop.xml：默认壁纸路径
-# - xfwm4.xml：窗口管理器主题、标题按钮布局
-# - xfce4-panel.xml：任务栏位置/插件顺序（底部 48px + whiskermenu + tasklist + 托盘 + 时钟）
-#   缺它则 xfce4-panel 首启用 hardcoded 默认值（顶部 panel + 老 applicationsmenu），
-#   表现为"开始菜单在最顶上 + 桌面细节不对齐"——这是登录后视觉割裂的根因。
-COPY desktop/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
-COPY desktop/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
-COPY desktop/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
-COPY desktop/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
-# Fluent 壁纸（明/暗），xfdesktop 通过 librsvg 直接渲染 SVG
-COPY desktop/fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper.svg
-COPY desktop/fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh /usr/local/bin/init-desktop.sh /etc/xrdp/startwm.sh \
-    && chmod 755 /usr/local/share/opencode-desktop-launchers/opencode-*.desktop /usr/share/applications/opencode-*.desktop
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh
 
 WORKDIR /workspace
 

@@ -1,0 +1,137 @@
+name: Build Desktop Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile.desktop'
+      - 'desktop/**'
+      - 'docker/init-desktop.sh'
+      - 'docker/xrdp-startwm.sh'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile.desktop'
+      - 'desktop/**'
+      - 'docker/init-desktop.sh'
+      - 'docker/xrdp-startwm.sh'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-desktop:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Free runner disk space
+        run: |
+          df -h
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes
+          df -h
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract lowercased image name
+        id: meta
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository }}"
+          echo "image=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build and push desktop image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.desktop
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.image }}:desktop
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  trigger-dynamic:
+    if: github.event_name != 'pull_request'
+    needs: build-desktop
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Resolve pinned dynamic versions
+        id: versions
+        run: |
+          BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
+          OPENCODE_VERSION=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
+          CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
+          CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)
+          SERENA_VERSION=$(echo "$BODY" | grep -oP 'serena-version=\K[^\s]+' || true)
+          CLAUDE_CODE_VERSION=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
+          CODEX_SECURITY_VERSION=$(echo "$BODY" | grep -oP 'codex-security-version=\K[^\s]+' || true)
+
+          if [ -z "$OPENCODE_VERSION" ] || [ -z "$CODE_SERVER_VERSION" ] || [ -z "$CODEX_VERSION" ] || [ -z "$SERENA_VERSION" ] || [ -z "$CLAUDE_CODE_VERSION" ] || [ -z "$CODEX_SECURITY_VERSION" ]; then
+            echo "Failed to resolve pinned dynamic versions from latest release body" >&2
+            exit 1
+          fi
+
+          echo "opencode_version=$OPENCODE_VERSION" >> $GITHUB_OUTPUT
+          echo "code_server_version=$CODE_SERVER_VERSION" >> $GITHUB_OUTPUT
+          echo "codex_version=$CODEX_VERSION" >> $GITHUB_OUTPUT
+          echo "serena_version=$SERENA_VERSION" >> $GITHUB_OUTPUT
+          echo "claude_code_version=$CLAUDE_CODE_VERSION" >> $GITHUB_OUTPUT
+          echo "codex_security_version=$CODEX_SECURITY_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate GitHub App token
+        # 用 GitHub App installation token 而非默认 GITHUB_TOKEN 派发 workflow_dispatch。
+        # 由 GITHUB_TOKEN 派发的 run，其完成时派发的 workflow_run 事件会被 GHA 防递归机制抑制，
+        # 导致 notify.yml 收不到动态层构建完成通知；改用 App token 可正常派发事件。
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          # 仅授权派发 workflow_dispatch 所需的最小权限
+          permission-actions: write
+
+      - name: Trigger dynamic layer build
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'docker-build.yml',
+              ref: 'main',
+              inputs: {
+                opencode_version: '${{ steps.versions.outputs.opencode_version }}',
+                code_server_version: '${{ steps.versions.outputs.code_server_version }}',
+                codex_version: '${{ steps.versions.outputs.codex_version }}',
+                serena_version: '${{ steps.versions.outputs.serena_version }}',
+                claude_code_version: '${{ steps.versions.outputs.claude_code_version }}',
+                codex_security_version: '${{ steps.versions.outputs.codex_security_version }}'
+              }
+            });

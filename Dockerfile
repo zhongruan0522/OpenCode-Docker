@@ -2,8 +2,8 @@
 
 # ==========================================
 # 动态层：仅包含自动检测更新的组件
-# FROM 基础镜像（ghcr.io/zhongruan0522/opencode-docker:base）
-# 每次自动更新触发时只重建此文件，base 层完全复用缓存
+# FROM 桌面层镜像（ghcr.io/zhongruan0522/opencode-docker:desktop）
+# 每次自动更新触发时只重建此文件，Base/桌面层完全复用缓存
 # ==========================================
 
 # ---
@@ -27,7 +27,7 @@
 #
 # 拆分 npm 层后，单个 npm 包升级只重建自己一层，不影响其他 npm 包缓存。
 
-ARG BASE_IMAGE=ghcr.io/zhongruan0522/opencode-docker:base
+ARG BASE_IMAGE=ghcr.io/zhongruan0522/opencode-docker:desktop
 FROM ${BASE_IMAGE}
 
 ARG OPENCODE_VERSION=latest
