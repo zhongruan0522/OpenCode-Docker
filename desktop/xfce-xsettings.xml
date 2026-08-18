@@ -7,7 +7,7 @@
      渲染：次像素 RGB + 轻微 Hinting，提升 RDP 远程显示清晰度
 
      ⚠️ 关键（对齐 XFCE 上游 xsettings.xml 源码结构）：
-      - ThemeName/IconThemeName 必须在 /Net/ 下（旧版误放 /Gtk/，导致主题完全不生效）
+      - ThemeName/IconThemeName 必须在 /Net/ 下，否则主题完全不生效
       - CursorThemeName 用空字符串（XFCE 上游惯例）；本项目指针走 /Gtk/ 下显式指定
       - Xft/Hinting 用 -1（自动，XFCE 上游默认）
 

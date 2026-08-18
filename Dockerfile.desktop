@@ -29,7 +29,6 @@ ARG SARASA_VERSION=1.0.26
 # dbus-x11 + dbus + policykit-1：补齐系统总线，让 polkit/udisks2 正常工作
 # fcitx5 + fcitx5-chinese-addons + gtk3 前端提供中文输入法（XFCE 走 GTK）
 # plank：macOS 风格 dock（WhiteSur 主题自带配套 plank/dock.theme）
-# papirus-icon-theme：保留作为兜底图标（WhiteSur 图标上游失效时降级显示）
 # xfce4-notifyd：圆角通知守护，否则 fcitx5 切换提示丑陋
 # 说明：fonts-noto-cjk、libgtk-3-0、xdg-utils 已在 Base 层（headless 渲染也依赖），
 # 通过层继承获得，不重复声明。
@@ -52,7 +51,6 @@ RUN apt-get update \
         fcitx5-chinese-addons \
         plank \
         dconf-cli \
-        papirus-icon-theme \
     && usermod -aG ssl-cert xrdp \
     && rm -rf /var/lib/apt/lists/*
 
