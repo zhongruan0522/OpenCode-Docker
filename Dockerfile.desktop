@@ -60,7 +60,7 @@ RUN apt-get update \
 #             降低 crypt_level 到 client 兼容更多客户端，禁用 bitmap_cache 减少内存占用，
 #             登录窗口背景色对齐 Fluent 主题（ls_top_window_bg_color=0067c0）
 # - startwm.sh: 启动 dbus 会话总线 + fcitx5 中文输入法 + XFCE4 会话
-#   通过 COPY docker/xrdp-startwm.sh 注入（见文件末尾 COPY 块）
+#   通过 COPY desktop/xrdp-startwm.sh 注入（见文件末尾 COPY 块）
 # 参考：https://github.com/neutrinolabs/xrdp/discussions/2309（容器内无 systemd 时需手动启动 xrdp）
 RUN sed -i \
     -e 's/^port=3389/port=3390/' \
@@ -168,12 +168,12 @@ COPY desktop/fluent-wallpaper.svg /usr/share/backgrounds/fluent/fluent-wallpaper
 COPY desktop/fluent-wallpaper-dark.svg /usr/share/backgrounds/fluent/fluent-wallpaper-dark.svg
 
 # ---
-# 8. 桌面启动脚本（docker/ 中的桌面专属部分）
+# 8. 桌面启动脚本（desktop/ 中的桌面专属部分）
 # ---
 # init-desktop.sh：entrypoint 在 ENABLE_DESKTOP=1 时调用的 root 级桌面引导
 # xrdp-startwm.sh：xrdp 会话启动脚本（dbus + fcitx5 + XFCE4）
-COPY docker/init-desktop.sh /usr/local/bin/init-desktop.sh
-COPY docker/xrdp-startwm.sh /etc/xrdp/startwm.sh
+COPY desktop/init-desktop.sh /usr/local/bin/init-desktop.sh
+COPY desktop/xrdp-startwm.sh /etc/xrdp/startwm.sh
 
 RUN chmod +x /usr/local/bin/init-desktop.sh /etc/xrdp/startwm.sh \
     && chmod 755 /usr/local/share/opencode-desktop-launchers/opencode-*.desktop /usr/share/applications/opencode-*.desktop

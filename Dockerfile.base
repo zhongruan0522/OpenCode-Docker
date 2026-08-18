@@ -605,11 +605,11 @@ RUN bash /tmp/preload-go-modules.sh \
     && chown -R app:app /home/app/go \
     && rm -f /tmp/preload-go-modules.sh
 
-# === 容器启动 / 进程管理脚本（docker/，仅 Base 归属部分） ===
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
-COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
-COPY docker/init-warp.sh /usr/local/bin/init-warp.sh
+# === 容器启动 / 进程管理脚本（base/，仅 Base 归属部分） ===
+COPY base/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY base/healthcheck.sh /usr/local/bin/healthcheck.sh
+COPY base/supervisord.conf /etc/supervisor/supervisord.conf
+COPY base/init-warp.sh /usr/local/bin/init-warp.sh
 # init-desktop.sh / xrdp-startwm.sh 归桌面层（Dockerfile.desktop），此处不再 COPY。
 # 桌面环境配置/资源（desktop/**）同样归桌面层。
 

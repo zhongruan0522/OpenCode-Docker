@@ -7,16 +7,12 @@ on:
     paths:
       - 'Dockerfile.desktop'
       - 'desktop/**'
-      - 'docker/init-desktop.sh'
-      - 'docker/xrdp-startwm.sh'
   pull_request:
     branches:
       - main
     paths:
       - 'Dockerfile.desktop'
       - 'desktop/**'
-      - 'docker/init-desktop.sh'
-      - 'docker/xrdp-startwm.sh'
   workflow_dispatch:
 
 env:
@@ -49,7 +45,7 @@ jobs:
           echo "Files changed in this push:"
           echo "$CHANGED"
           # Base 层归属路径（桌面层 FROM :base，同 push 变动即存在竞态）
-          BASE_RE='^(Dockerfile\.base|base/|docker/(entrypoint\.sh|healthcheck\.sh|supervisord\.conf|init-warp\.sh))'
+          BASE_RE='^(Dockerfile\.base|base/)'
           if grep -qE "$BASE_RE"; then
             echo "Base-layer files changed in same push; skip direct trigger, cascade will rebuild."
             echo "skip=true" >> "$GITHUB_OUTPUT"

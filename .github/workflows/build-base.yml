@@ -7,21 +7,12 @@ on:
     paths:
       - 'Dockerfile.base'
       - 'base/**'
-      # docker/ 中仅 Base 归属的启动文件；init-desktop.sh / xrdp-startwm.sh 归桌面层
-      - 'docker/entrypoint.sh'
-      - 'docker/healthcheck.sh'
-      - 'docker/supervisord.conf'
-      - 'docker/init-warp.sh'
   pull_request:
     branches:
       - main
     paths:
       - 'Dockerfile.base'
       - 'base/**'
-      - 'docker/entrypoint.sh'
-      - 'docker/healthcheck.sh'
-      - 'docker/supervisord.conf'
-      - 'docker/init-warp.sh'
   schedule:
     # 每周一北京时间 04:00 (UTC 周日 20:00)
     - cron: '0 20 * * 0'

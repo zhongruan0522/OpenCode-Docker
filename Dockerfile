@@ -88,7 +88,7 @@ RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl
 
 # 动态层覆盖启动配置。
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
-COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
+COPY base/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY base/healthcheck.sh /usr/local/bin/healthcheck.sh
+COPY base/supervisord.conf /etc/supervisor/supervisord.conf
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
