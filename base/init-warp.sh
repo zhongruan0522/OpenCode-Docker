@@ -6,6 +6,8 @@
 #
 # 路由策略：WARP 仅作为出口代理，opencode 的入站 HTTP 服务回包
 # 和内网通信走原始默认路由，不经过 WARP
+#
+# 协议：WireGuard（内核，默认） | MASQUE（usque 用户态，TUNNEL_PROTOCOL=masque）
 
 set -e
 
@@ -20,9 +22,40 @@ warp_fail() { echo "==> [WARP] ❌ WARP 代理启动失败 (日志: $_EXEC_LOG)"
 WG_CONF="/etc/wireguard/wg0.conf"
 WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
 WARP_SOCKS_BIND="${WARP_SOCKS_BIND:-0.0.0.0}"
+
+# wgcf 下载可靠性参数（吸收自上游 81248d6 / 5655bd6）
+WGCF_FALLBACK_VER="${WGCF_FALLBACK_VER:-2.2.29}"
+CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
+
+# WireGuard 调优参数（吸收自上游 904e9c1）
+WG_MTU="${MTU:-1280}"
+KEEPALIVE="${KEEPALIVE:-15}"
+
+# MASQUE / usque（吸收自上游 8045ba9 / d71f750）
+# 配置与 WireGuard 同置于 /etc/wireguard，warp-data 卷可同时持久化两种协议身份
+TUNNEL_PROTOCOL="${TUNNEL_PROTOCOL:-wireguard}"
+USQUE_CONFIG="${USQUE_CONFIG:-/etc/wireguard/masque-config.json}"
+# l4-socks = 轻量 TCP-only（推荐）；socks = 完整 gVisor L3（TCP+UDP，更重）
+MASQUE_PROXY_MODE="${MASQUE_PROXY_MODE:-l4-socks}"
+MASQUE_HTTP2="${MASQUE_HTTP2:-0}"
+WARP_JWT="${WARP_JWT:-}"
+WARP_LICENSE="${WARP_LICENSE:-}"
+USQUE_DEVICE_NAME="${USQUE_DEVICE_NAME:-MicroWARP}"
+# 小内存宿主机上约束 Go 运行时 RSS（仅 MASQUE 路径生效）
+GOMEMLIMIT="${GOMEMLIMIT:-512MiB}"
+
 mkdir -p /etc/wireguard
 
-# wgcf 下载辅助函数，支持 GH_PROXY 代理前缀
+# ==========================================
+# 工具函数
+# ==========================================
+github_auth_header() {
+    token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [ -n "$token" ]; then
+        printf 'Authorization: Bearer %s' "$token"
+    fi
+}
+
 build_wgcf_download_url() {
     WGCF_VER=$1
     WGCF_ARCH=$2
@@ -34,10 +67,77 @@ build_wgcf_download_url() {
     echo "$RAW_URL"
 }
 
+# GitHub API 限流/不可达时回退到锁定版本，避免首启死锁（上游 5655bd6）
+fetch_latest_wgcf_version() {
+    api="https://api.github.com/repos/ViRb3/wgcf/releases/latest"
+    auth="$(github_auth_header)"
+    body=""
+    if [ -n "$auth" ]; then
+        body="$(curl -fsSL -m "$CURL_TIMEOUT" -H "$auth" "$api" 2>/dev/null || true)"
+    else
+        body="$(curl -fsSL -m "$CURL_TIMEOUT" "$api" 2>/dev/null || true)"
+    fi
+    ver="$(printf '%s' "$body" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/p' | head -n 1)"
+    if [ -z "$ver" ]; then
+        echo "==> [WARP] WARNING: GitHub API 获取 wgcf 版本失败，回退到 v${WGCF_FALLBACK_VER}" >&2
+        printf '%s' "$WGCF_FALLBACK_VER"
+        return 0
+    fi
+    printf '%s' "$ver"
+}
+
+# wget/curl 双通道 + 3 次递增退避重试（上游 5655bd6）
+download_file() {
+    url=$1
+    dest=$2
+    tries=0
+    max_tries=3
+    while [ "$tries" -lt "$max_tries" ]; do
+        tries=$((tries + 1))
+        if command -v wget >/dev/null 2>&1; then
+            if wget --timeout=30 -qO "$dest" "$url" 2>/dev/null; then
+                [ -s "$dest" ] && return 0
+            fi
+        fi
+        if command -v curl >/dev/null 2>&1; then
+            if curl -fsSL -m 30 -o "$dest" "$url" 2>/dev/null; then
+                [ -s "$dest" ] && return 0
+            fi
+        fi
+        sleep $((tries * 2))
+    done
+    return 1
+}
+
+is_truthy() {
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+normalize_tunnel_protocol() {
+    raw="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$raw" in
+        wireguard|wg|wg0|kernel) printf 'wireguard' ;;
+        masque|usque|h3|http3|quic) printf 'masque' ;;
+        *) echo "==> [WARP] ❌ 未知 TUNNEL_PROTOCOL='$1'（支持: wireguard | masque）" >&2; exit 1 ;;
+    esac
+}
+
+normalize_masque_proxy_mode() {
+    raw="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    case "$raw" in
+        l4|l4-socks|l4_socks|l4socks) printf 'l4-socks' ;;
+        socks|full|gvisor|l3) printf 'socks' ;;
+        *) echo "==> [WARP] ❌ 未知 MASQUE_PROXY_MODE='$1'（支持: l4-socks | socks）" >&2; exit 1 ;;
+    esac
+}
+
 # ==========================================
-# 阶段 1：自动注册 Cloudflare WARP 设备
+# WireGuard 路径 - 阶段 1：自动注册 Cloudflare WARP 设备
 # ==========================================
-if [ ! -f "$WG_CONF" ]; then
+register_warp() {
     warp_log "未检测到配置，正在全自动初始化 Cloudflare WARP..."
 
     ARCH=$(uname -m)
@@ -47,156 +147,357 @@ if [ ! -f "$WG_CONF" ]; then
         *) echo "==> [WARP] ❌ 不支持的架构: $ARCH"; exit 1 ;;
     esac
 
-    WGCF_VER=$(curl -sL https://api.github.com/repos/ViRb3/wgcf/releases/latest \
-        | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
-    warp_log "wgcf 最新版本: v${WGCF_VER}"
+    WGCF_VER="$(fetch_latest_wgcf_version)"
+    warp_log "wgcf 版本: v${WGCF_VER} (${WGCF_ARCH})"
 
-    wget --timeout=15 -qO /tmp/wgcf \
-        "$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")"
-    chmod +x /tmp/wgcf
+    # mktemp 隔离工作目录，注册材料阅后即焚（上游 5655bd6）
+    workdir="$(mktemp -d /tmp/microwarp.XXXXXX)" || exit 1
+
+    if ! download_file "$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")" "$workdir/wgcf"; then
+        rm -rf "$workdir"
+        echo "==> [WARP] ❌ wgcf 二进制下载失败" >&2
+        exit 1
+    fi
+    chmod +x "$workdir/wgcf"
 
     warp_log "正在向 Cloudflare 注册设备..."
-    cd /tmp && ./wgcf register --accept-tos > /dev/null
-
-    warp_log "正在生成 WireGuard 配置文件..."
-    ./wgcf generate > /dev/null
-    mv /tmp/wgcf-profile.conf "$WG_CONF"
-
-    # 阅后即焚：删除注册工具和账号明文
-    rm -f /tmp/wgcf /tmp/wgcf-account.toml
-    warp_log "节点配置生成成功！"
-else
-    warp_log "检测到已有持久化配置，跳过注册。"
-fi
-
-# ==========================================
-# 阶段 2：配置清洗与内核兼容性处理
-# ==========================================
-# 智能提取纯 IPv4 地址，防止双栈 IP 写在同一行导致误杀
-IPV4_ADDR=$(grep '^Address' "$WG_CONF" \
-    | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' | head -n 1)
-
-# 物理删除原始 Address/AllowedIPs/DNS
-sed -i '/^Address/d'       "$WG_CONF"
-sed -i '/^AllowedIPs/d'    "$WG_CONF"
-sed -i '/^DNS.*/d'         "$WG_CONF"
-
-# 重建 IPv4 地址
-if [ -n "$IPV4_ADDR" ]; then
-    sed -i "/\[Interface\]/a Address = $IPV4_ADDR" "$WG_CONF"
-fi
-
-# 保留 AllowedIPs = 0.0.0.0/0，让 wg-quick 接管默认公网出站到 WARP。
-# 后面仅为私网/本地回程补更具体的绕过路由，满足“公网全走 WARP，本地地址不走”。
-sed -i "/\[Peer\]/a AllowedIPs = 0.0.0.0\/0" "$WG_CONF"
-
-# wg-quick 在 Debian 上不会出现 src_valid_mark 问题，但保险起见做检查
-if command -v wg-quick >/dev/null 2>&1; then
-    WG_QUICK_BIN=$(command -v wg-quick)
-    if grep -q 'src_valid_mark' "$WG_QUICK_BIN" 2>/dev/null; then
-        sed -i '/src_valid_mark/d' "$WG_QUICK_BIN"
+    if ! (
+        cd "$workdir"
+        ./wgcf register --accept-tos > /dev/null 2>&1
+        warp_log "正在生成 WireGuard 配置文件..."
+        ./wgcf generate > /dev/null 2>&1
+    ); then
+        rm -rf "$workdir"
+        echo "==> [WARP] ❌ wgcf 注册或配置生成失败" >&2
+        exit 1
     fi
-fi
 
-# 注入 15 秒 UDP 心跳保活，对抗运营商 QoS 丢包
-if ! grep -q "PersistentKeepalive" "$WG_CONF"; then
-    sed -i '/\[Peer\]/a PersistentKeepalive = 15' "$WG_CONF"
-else
-    sed -i 's/PersistentKeepalive.*/PersistentKeepalive = 15/g' "$WG_CONF"
-fi
+    if [ ! -f "$workdir/wgcf-profile.conf" ]; then
+        rm -rf "$workdir"
+        echo "==> [WARP] ❌ 未找到 wgcf-profile.conf，注册可能失败" >&2
+        exit 1
+    fi
 
-# 自定义 Endpoint IP，用于绕过某些机房的 QoS 限制
-if [ -n "${ENDPOINT_IP:-}" ]; then
-    warp_log "检测到自定义 Endpoint: $ENDPOINT_IP"
-    sed -i "s/^Endpoint.*/Endpoint = $ENDPOINT_IP/g" "$WG_CONF"
-fi
+    mv "$workdir/wgcf-profile.conf" "$WG_CONF"
+    # 阅后即焚：删除注册工具和账号明文
+    rm -rf "$workdir"
+    warp_log "节点配置生成成功！"
+}
 
 # ==========================================
-# 阶段 3：启动 WireGuard 并修复路由
+# WireGuard 路径 - 阶段 2：配置清洗与内核兼容性处理
 # ==========================================
-# 记录 WARP 启动前的默认路由和网关信息，用于后续恢复
-PRE_DEFAULT_GW=$(ip route show default 0.0.0.0/0 2>/dev/null | head -n 1 || true)
-PRE_WARP_ROUTE=$(ip route get 100.64.0.1 2>/dev/null | head -n 1 || true)
-PRE_WARP_GW=$(printf '%s\n' "$PRE_WARP_ROUTE" \
-    | awk '{for (i = 1; i <= NF; i++) if ($i == "via") print $(i + 1)}')
-PRE_WARP_DEV=$(printf '%s\n' "$PRE_WARP_ROUTE" \
-    | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") print $(i + 1)}')
+sanitize_wg_config() {
+    # wgcf 写出的配置可能是零字节残留（注册中途被杀），必须重新注册（上游 d71f750 思路）
+    if [ -f "$WG_CONF" ] && [ ! -s "$WG_CONF" ]; then
+        warp_log "检测到零字节残留配置，删除后重新注册..."
+        rm -f "$WG_CONF"
+    fi
 
-warp_log "正在启动内核级 wg0 网卡..."
-wg-quick up wg0 > /dev/null 2>&1
+    if [ ! -f "$WG_CONF" ]; then
+        register_warp
+    else
+        warp_log "检测到已有持久化配置，跳过注册。"
+    fi
 
-# ==========================================
-# 阶段 3.5：补私网绕过路由
-# ==========================================
-# wg-quick 会把默认公网流量切到 wg0，但 main 表里的更具体路由仍然优先生效。
-# 这里为 RFC1918、链路本地和 Tailscale CGNAT 地址补回原网关路由，
-# 让 10/172/192/100.64 等本地地址不走 WARP。
+    # 智能提取纯 IPv4 地址，防止双栈 IP 写在同一行导致误杀
+    IPV4_ADDR=$(grep '^Address' "$WG_CONF" \
+        | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' | head -n 1)
 
-PRE_DEFAULT_GW_IP=$(printf '%s\n' "$PRE_DEFAULT_GW" | awk '{for (i = 1; i <= NF; i++) if ($i == "via") print $(i + 1)}')
-PRE_DEFAULT_DEV=$(printf '%s\n' "$PRE_DEFAULT_GW" | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") print $(i + 1)}')
-WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-"10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10"}
+    # 物理删除原始 Address/AllowedIPs/DNS/MTU
+    sed -i '/^Address/d'       "$WG_CONF"
+    sed -i '/^AllowedIPs/d'    "$WG_CONF"
+    sed -i '/^DNS.*/d'         "$WG_CONF"
+    # 清除可能存在的旧 MTU（兼容 Busybox 正则）
+    sed -i '/^[Mm][Tt][Uu].*/d' "$WG_CONF"
 
-if [ -n "$PRE_DEFAULT_GW_IP" ] && [ -n "$PRE_DEFAULT_DEV" ]; then
-    warp_log "正在恢复私网绕过路由..."
-    for cidr in $WARP_BYPASS_CIDRS; do
-        if ip route replace "$cidr" via "$PRE_DEFAULT_GW_IP" dev "$PRE_DEFAULT_DEV" > /dev/null 2>&1; then
-            warp_log "已添加绕过路由: $cidr via $PRE_DEFAULT_GW_IP dev $PRE_DEFAULT_DEV"
+    # 重建 IPv4 地址
+    if [ -n "$IPV4_ADDR" ]; then
+        sed -i "/\[Interface\]/a Address = $IPV4_ADDR" "$WG_CONF"
+    fi
+
+    # 动态注入 MTU，默认 1280 避免 PPPoE/IPIP 等小 MTU 链路分片（上游 904e9c1）
+    warp_log "MTU 值设置为: $WG_MTU"
+    sed -i "/\[Interface\]/a MTU = $WG_MTU" "$WG_CONF"
+
+    # 保留 AllowedIPs = 0.0.0.0/0，让 wg-quick 接管默认公网出站到 WARP。
+    # 后面仅为私网/本地回程补更具体的绕过路由，满足"公网全走 WARP，本地地址不走"。
+    sed -i "/\[Peer\]/a AllowedIPs = 0.0.0.0\/0" "$WG_CONF"
+
+    # wg-quick 在 Debian 上不会出现 src_valid_mark 问题，但保险起见做检查
+    if command -v wg-quick >/dev/null 2>&1; then
+        WG_QUICK_BIN=$(command -v wg-quick)
+        if grep -q 'src_valid_mark' "$WG_QUICK_BIN" 2>/dev/null; then
+            sed -i '/src_valid_mark/d' "$WG_QUICK_BIN"
         fi
-    done
+    fi
 
-    # Docker 发布端口的公网入站连接会 DNAT 到容器主网卡地址。
-    # 响应包源地址固定为该主网卡地址，必须回到宿主网关，不能被 WARP 默认策略路由接走。
-    PRE_DEFAULT_SRC=$(ip -o -4 addr show dev "$PRE_DEFAULT_DEV" scope global \
-        | awk 'NR == 1 { split($4, addr, "/"); print addr[1] }')
-    if [ -n "$PRE_DEFAULT_SRC" ]; then
-        if ! ip rule show | grep -q "from ${PRE_DEFAULT_SRC} lookup main"; then
-            if ip rule add pref 100 from "$PRE_DEFAULT_SRC/32" lookup main > /dev/null 2>&1; then
-                warp_log "已添加入站服务回程策略: from $PRE_DEFAULT_SRC lookup main"
+    # 注入 UDP 心跳保活（秒数可配，默认 15），对抗运营商 QoS 丢包（上游 904e9c1）
+    if ! grep -q "PersistentKeepalive" "$WG_CONF"; then
+        sed -i "/\[Peer\]/a PersistentKeepalive = $KEEPALIVE" "$WG_CONF"
+    else
+        sed -i "s/PersistentKeepalive.*/PersistentKeepalive = $KEEPALIVE/g" "$WG_CONF"
+    fi
+
+    # 自定义 Endpoint IP，用于绕过某些机房的 QoS 限制
+    if [ -n "${ENDPOINT_IP:-}" ]; then
+        warp_log "检测到自定义 Endpoint: $ENDPOINT_IP"
+        if grep -qi '^[[:space:]]*Endpoint[[:space:]]*=' "$WG_CONF"; then
+            sed -i "s|^[[:space:]]*Endpoint[[:space:]]*=.*|Endpoint = ${ENDPOINT_IP}|g" "$WG_CONF"
+        else
+            sed -i "/\[Peer\]/a Endpoint = ${ENDPOINT_IP}" "$WG_CONF"
+        fi
+    fi
+}
+
+# ==========================================
+# WireGuard 路径 - 阶段 3：启动 WireGuard 并修复路由
+# ==========================================
+start_wireguard() {
+    # 记录 WARP 启动前的默认路由和网关信息，用于后续恢复
+    PRE_DEFAULT_GW=$(ip route show default 0.0.0.0/0 2>/dev/null | head -n 1 || true)
+    PRE_WARP_ROUTE=$(ip route get 100.64.0.1 2>/dev/null | head -n 1 || true)
+    PRE_WARP_GW=$(printf '%s\n' "$PRE_WARP_ROUTE" \
+        | awk '{for (i = 1; i <= NF; i++) if ($i == "via") print $(i + 1)}')
+    PRE_WARP_DEV=$(printf '%s\n' "$PRE_WARP_ROUTE" \
+        | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") print $(i + 1)}')
+
+    warp_log "正在启动内核级 wg0 网卡..."
+    wg-quick up wg0 > /dev/null 2>&1
+
+    # ==========================================
+    # 阶段 3.5：补私网绕过路由
+    # ==========================================
+    # wg-quick 会把默认公网流量切到 wg0，但 main 表里的更具体路由仍然优先生效。
+    # 这里为 RFC1918、链路本地和 Tailscale CGNAT 地址补回原网关路由，
+    # 让 10/172/192/100.64 等本地地址不走 WARP。
+
+    PRE_DEFAULT_GW_IP=$(printf '%s\n' "$PRE_DEFAULT_GW" | awk '{for (i = 1; i <= NF; i++) if ($i == "via") print $(i + 1)}')
+    PRE_DEFAULT_DEV=$(printf '%s\n' "$PRE_DEFAULT_GW" | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") print $(i + 1)}')
+    WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-"10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10"}
+
+    if [ -n "$PRE_DEFAULT_GW_IP" ] && [ -n "$PRE_DEFAULT_DEV" ]; then
+        warp_log "正在恢复私网绕过路由..."
+        for cidr in $WARP_BYPASS_CIDRS; do
+            if ip route replace "$cidr" via "$PRE_DEFAULT_GW_IP" dev "$PRE_DEFAULT_DEV" > /dev/null 2>&1; then
+                warp_log "已添加绕过路由: $cidr via $PRE_DEFAULT_GW_IP dev $PRE_DEFAULT_DEV"
+            fi
+        done
+
+        # Docker 发布端口的公网入站连接会 DNAT 到容器主网卡地址。
+        # 响应包源地址固定为该主网卡地址，必须回到宿主网关，不能被 WARP 默认策略路由接走。
+        PRE_DEFAULT_SRC=$(ip -o -4 addr show dev "$PRE_DEFAULT_DEV" scope global \
+            | awk 'NR == 1 { split($4, addr, "/"); print addr[1] }')
+        if [ -n "$PRE_DEFAULT_SRC" ]; then
+            if ! ip rule show | grep -q "from ${PRE_DEFAULT_SRC} lookup main"; then
+                if ip rule add pref 100 from "$PRE_DEFAULT_SRC/32" lookup main > /dev/null 2>&1; then
+                    warp_log "已添加入站服务回程策略: from $PRE_DEFAULT_SRC lookup main"
+                fi
             fi
         fi
+    else
+        warp_log "未检测到启动前默认网关，跳过私网绕过路由恢复"
     fi
-else
-    warp_log "未检测到启动前默认网关，跳过私网绕过路由恢复"
-fi
 
-# 恢复 Tailscale 回程路由（如有）
-TAILSCALE_CIDR="${TAILSCALE_CIDR:-100.64.0.0/10}"
-if [ -n "$PRE_WARP_GW" ] && [ -n "$PRE_WARP_DEV" ]; then
-    if ip route replace "$TAILSCALE_CIDR" via "$PRE_WARP_GW" dev "$PRE_WARP_DEV" > /dev/null 2>&1; then
-        warp_log "已为 ${TAILSCALE_CIDR} 恢复回程路由"
+    # 恢复 Tailscale 回程路由（如有）
+    TAILSCALE_CIDR="${TAILSCALE_CIDR:-100.64.0.0/10}"
+    if [ -n "$PRE_WARP_GW" ] && [ -n "$PRE_WARP_DEV" ]; then
+        if ip route replace "$TAILSCALE_CIDR" via "$PRE_WARP_GW" dev "$PRE_WARP_DEV" > /dev/null 2>&1; then
+            warp_log "已为 ${TAILSCALE_CIDR} 恢复回程路由"
+        fi
     fi
-fi
+}
 
 # ==========================================
-# 阶段 4：启动 SOCKS5 代理
+# WireGuard 路径 - 阶段 4：启动 MicroSOCKS
 # ==========================================
-warp_log "启动 MicroSOCKS 引擎，监听 ${WARP_SOCKS_BIND}:${WARP_SOCKS_PORT}"
+start_socks() {
+    warp_log "启动 MicroSOCKS 引擎，监听 ${WARP_SOCKS_BIND}:${WARP_SOCKS_PORT}"
 
-if [ -n "${SOCKS_USER:-}" ] && [ -n "${SOCKS_PASS:-}" ]; then
-    warp_log "SOCKS5 认证已开启 (User: $SOCKS_USER)"
-    microsocks -i "$WARP_SOCKS_BIND" -p "$WARP_SOCKS_PORT" \
-        -u "$SOCKS_USER" -P "$SOCKS_PASS" &
-else
-    microsocks -i "$WARP_SOCKS_BIND" -p "$WARP_SOCKS_PORT" &
-fi
+    if [ -n "${SOCKS_USER:-}" ] && [ -n "${SOCKS_PASS:-}" ]; then
+        warp_log "SOCKS5 认证已开启 (User: $SOCKS_USER)"
+        microsocks -i "$WARP_SOCKS_BIND" -p "$WARP_SOCKS_PORT" \
+            -u "$SOCKS_USER" -P "$SOCKS_PASS" &
+    else
+        # 对外监听（0.0.0.0）且未设认证时明确告警，避免变成公网开放代理（上游 1d7a482）
+        if [ "$WARP_SOCKS_BIND" = "0.0.0.0" ] || [ "$WARP_SOCKS_BIND" = "::" ]; then
+            echo "==> [WARP] ⚠️  WARNING: SOCKS5 对外监听 (${WARP_SOCKS_BIND}) 但未设置 SOCKS_USER/SOCKS_PASS，当前为公开访问模式！" >&2
+        fi
+        microsocks -i "$WARP_SOCKS_BIND" -p "$WARP_SOCKS_PORT" &
+    fi
 
-WARP_PID=$!
-# 等待 microsocks 就绪
-sleep 1
+    WARP_PID=$!
+    # 等待 microsocks 就绪
+    sleep 1
 
-# 验证 microsocks 是否成功启动，避免后续误以为 WARP 已可用
-if ! kill -0 "$WARP_PID" 2>/dev/null; then
-    warp_fail
-fi
+    # 验证 microsocks 是否成功启动，避免后续误以为 WARP 已可用
+    if ! kill -0 "$WARP_PID" 2>/dev/null; then
+        warp_fail
+    fi
+}
 
-# 获取出口 IP
-_WARP_EXIT_IP=$(curl -s -m 5 --proxy "socks5://127.0.0.1:${WARP_SOCKS_PORT}" \
-    https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep -oE 'ip=[0-9.]+' | cut -d= -f2 || true)
+# ==========================================
+# MASQUE 路径（usque 用户态，抗 UDP QoS/封锁场景）
+# 吸收自上游 8045ba9 / d71f750
+# ==========================================
+register_masque() {
+    command -v usque >/dev/null 2>&1 || {
+        echo "==> [WARP] ❌ 镜像内未找到 usque，无法使用 MASQUE 模式" >&2
+        exit 1
+    }
 
-warp_ok
+    conf_dir="$(dirname "$USQUE_CONFIG")"
+    mkdir -p "$conf_dir"
 
-if [ -n "$_WARP_EXIT_IP" ]; then
-    echo "==> [WARP] 出口 IP: $_WARP_EXIT_IP"
-else
-    echo "==> [WARP] 出口 IP: 获取超时"
-fi
+    if [ -f "$USQUE_CONFIG" ] && [ -s "$USQUE_CONFIG" ]; then
+        warp_log "检测到已有 MASQUE 配置: ${USQUE_CONFIG}"
+        return 0
+    fi
+
+    # 删除零字节残留配置，避免 usque 误判（上游 d71f750）
+    if [ -f "$USQUE_CONFIG" ] && [ ! -s "$USQUE_CONFIG" ]; then
+        rm -f "$USQUE_CONFIG"
+    fi
+
+    warp_log "未检测到 MASQUE 配置，正在通过 usque 注册 Cloudflare WARP 设备..."
+    # -a 接受 ToS；-n 指定设备名
+    set -- usque -c "$USQUE_CONFIG" register -a
+    if [ -n "$USQUE_DEVICE_NAME" ]; then
+        set -- "$@" -n "$USQUE_DEVICE_NAME"
+    fi
+    if [ -n "$WARP_JWT" ]; then
+        warp_log "使用 Zero Trust JWT 注册"
+        set -- "$@" --jwt "$WARP_JWT"
+    fi
+
+    # 输出落盘以便诊断；usque 常在创建配置前打印 "Config file not found"
+    reg_log="$(mktemp /tmp/usque-register.XXXXXX 2>/dev/null || echo /tmp/usque-register.log)"
+    if ! (
+        cd "$conf_dir" || exit 1
+        "$@" > "$reg_log" 2>&1
+    ); then
+        cat "$reg_log" 2>/dev/null || true
+        rm -f "$reg_log"
+        echo "==> [WARP] ❌ usque register 失败（可能触发 Cloudflare 限流，请稍后重试并确保 volume 持久化配置）" >&2
+        exit 1
+    fi
+    rm -f "$reg_log"
+
+    # usque 可能把 config.json 写到 CWD —— 规范化到 USQUE_CONFIG（上游 d71f750）
+    if [ ! -f "$USQUE_CONFIG" ] || [ ! -s "$USQUE_CONFIG" ]; then
+        if [ -f "$conf_dir/config.json" ] && [ -s "$conf_dir/config.json" ]; then
+            mv -f "$conf_dir/config.json" "$USQUE_CONFIG"
+            warp_log "已将 config.json 规范为 ${USQUE_CONFIG}"
+        fi
+    fi
+
+    [ -f "$USQUE_CONFIG" ] && [ -s "$USQUE_CONFIG" ] || {
+        echo "==> [WARP] ❌ usque register 后未生成配置: $USQUE_CONFIG" >&2
+        exit 1
+    }
+    warp_log "MASQUE 设备注册成功 → ${USQUE_CONFIG}"
+}
+
+# WARP+ license 尽力绑定，失败不阻断代理（上游 8045ba9）
+maybe_apply_warp_license() {
+    [ -n "$WARP_LICENSE" ] || return 0
+    command -v usque >/dev/null 2>&1 || return 0
+
+    warp_log "尝试绑定 WARP+ license..."
+    if usque -c "$USQUE_CONFIG" license "$WARP_LICENSE" >/dev/null 2>&1; then
+        warp_log "WARP+ license 已应用 (license 子命令)"
+        return 0
+    fi
+    if usque -c "$USQUE_CONFIG" account license "$WARP_LICENSE" >/dev/null 2>&1; then
+        warp_log "WARP+ license 已应用 (account license)"
+        return 0
+    fi
+    echo "==> [WARP] ⚠️  当前 usque 构建可能不支持运行时 license 绑定；若需 WARP+ 请查阅 usque 文档或重新注册" >&2
+}
+
+start_masque_socks() {
+    proxy_mode="$(normalize_masque_proxy_mode "$MASQUE_PROXY_MODE")"
+    warp_log "协议: MASQUE (usque)  代理模式: ${proxy_mode}"
+
+    # 小内存宿主机软上限 Go 堆（运行时忽略则无效果）
+    if [ -n "${GOMEMLIMIT:-}" ]; then
+        export GOMEMLIMIT
+        warp_log "GOMEMLIMIT=${GOMEMLIMIT}"
+    fi
+
+    # 全局 -c 必须在子命令之前
+    set -- usque -c "$USQUE_CONFIG" "$proxy_mode" -b "$WARP_SOCKS_BIND" -p "$WARP_SOCKS_PORT"
+
+    if [ -n "${SOCKS_USER:-}" ] && [ -n "${SOCKS_PASS:-}" ]; then
+        warp_log "SOCKS5 认证已开启 (User: $SOCKS_USER)"
+        set -- "$@" -u "$SOCKS_USER" -w "$SOCKS_PASS"
+    else
+        if [ "$WARP_SOCKS_BIND" = "0.0.0.0" ] || [ "$WARP_SOCKS_BIND" = "::" ]; then
+            echo "==> [WARP] ⚠️  WARNING: SOCKS5 对外监听 (${WARP_SOCKS_BIND}) 但未设置 SOCKS_USER/SOCKS_PASS，当前为公开访问模式！" >&2
+        fi
+    fi
+
+    # HTTP/2 (TCP:443) 回退 — 仅完整 socks 模式支持，l4-socks 是 usque 限制
+    if is_truthy "$MASQUE_HTTP2"; then
+        if [ "$proxy_mode" = "l4-socks" ]; then
+            echo "==> [WARP] ⚠️  MASQUE_HTTP2=1 但 l4-socks 不支持 --http2；请改 MASQUE_PROXY_MODE=socks，或关闭 HTTP2" >&2
+        else
+            warp_log "启用 MASQUE HTTP/2 (TCP) 回退"
+            set -- "$@" --http2
+        fi
+    fi
+
+    warp_log "usque ${proxy_mode} 监听 ${WARP_SOCKS_BIND}:${WARP_SOCKS_PORT}"
+    "$@" &
+    usque_pid=$!
+    sleep 1
+    if ! kill -0 "$usque_pid" 2>/dev/null; then
+        warp_fail
+    fi
+}
+
+run_wireguard_path() {
+    sanitize_wg_config
+    start_wireguard
+    start_socks
+}
+
+run_masque_path() {
+    register_masque
+    maybe_apply_warp_license
+    start_masque_socks
+}
+
+# ==========================================
+# 出口 IP 探测（经 SOCKS5 代理，数字端点避免 DNS 挂起，上游 857c7a3）
+# ==========================================
+detect_exit_ip() {
+    _WARP_EXIT_IP=$(curl -4 -sS --connect-timeout 2 -m 5 \
+        --proxy "socks5://127.0.0.1:${WARP_SOCKS_PORT}" \
+        https://1.1.1.1/cdn-cgi/trace 2>/dev/null \
+        | grep -oE 'ip=[0-9.]+' | cut -d= -f2 || true)
+}
+
+# ==========================================
+# Main
+# ==========================================
+main() {
+    proto="$(normalize_tunnel_protocol "$TUNNEL_PROTOCOL")"
+
+    case "$proto" in
+        wireguard) run_wireguard_path ;;
+        masque)    run_masque_path ;;
+        *)         echo "==> [WARP] ❌ 内部错误: 未处理的协议 $proto" >&2; exit 1 ;;
+    esac
+
+    warp_ok
+
+    detect_exit_ip
+    if [ -n "$_WARP_EXIT_IP" ]; then
+        echo "==> [WARP] 出口 IP: $_WARP_EXIT_IP"
+    else
+        echo "==> [WARP] 出口 IP: 获取超时"
+    fi
+}
+
+main "$@"

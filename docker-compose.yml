@@ -36,6 +36,7 @@ services:
       - LOCAL_GID=${LOCAL_GID:-10001} # 启动时把 app 用户调整为宿主期望 GID
       # MicroWARP
       - ENABLE_WARP=${ENABLE_WARP:-1} # 是否启用 MicroWARP 初始化；关闭后不会注入 SOCKS5_PROXY
+      - TUNNEL_PROTOCOL=${TUNNEL_PROTOCOL:-wireguard} # 隧道协议：wireguard（内核，默认）| masque（usque 用户态，抗 UDP QoS/封锁）
       - WARP_SOCKS_PORT=${WARP_SOCKS_PORT:-1080} # MicroWARP SOCKS 端口
       - WARP_SOCKS_BIND=${WARP_SOCKS_BIND:-0.0.0.0} # MicroWARP SOCKS 监听地址（0.0.0.0 对外可见，127.0.0.1 仅容器内）
       - SOCKS_USER=${SOCKS_USER:-} # MicroWARP SOCKS 认证用户名，留空则不启用用户名
@@ -44,6 +45,14 @@ services:
       - GH_PROXY=${GH_PROXY:-} # GitHub 访问代理覆盖值，供 init-warp 或相关脚本使用
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-} # 需要绕过 WARP 的 Tailscale 网段
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-} # 额外绕过 WARP 的 CIDR 列表
+      - MTU=${MTU:-1280} # WireGuard MTU，小 MTU 链路（PPPoE 等）避免分片
+      - KEEPALIVE=${KEEPALIVE:-15} # WireGuard PersistentKeepalive 秒数，对抗 NAT/QoS 空闲断流
+      # MicroWARP - MASQUE 协议（TUNNEL_PROTOCOL=masque 时生效）
+      - MASQUE_PROXY_MODE=${MASQUE_PROXY_MODE:-l4-socks} # l4-socks（轻量 TCP-only，推荐）| socks（完整 gVisor L3，TCP+UDP）
+      - MASQUE_HTTP2=${MASQUE_HTTP2:-0} # 1 = TCP/HTTP2 回退（需 MASQUE_PROXY_MODE=socks）
+      - WARP_JWT=${WARP_JWT:-} # Zero Trust team token（MASQUE 注册用），留空则普通注册
+      - WARP_LICENSE=${WARP_LICENSE:-} # WARP+ license key（尽力绑定，失败不阻断）
+      - GOMEMLIMIT=${GOMEMLIMIT:-512MiB} # MASQUE 路径 Go 运行时 RSS 软上限
       # 远程桌面 (xrdp + XFCE4)
       - ENABLE_DESKTOP=${ENABLE_DESKTOP:-1} # 是否启用 xrdp 远程桌面，默认启用，端口 3390
       - DESKTOP_PASSWORD=${DESKTOP_PASSWORD:-app} # app 用户 RDP 登录密码（仅 ALLOW_APP_DESKTOP=1 时生效），建议改为强密码
@@ -108,6 +117,13 @@ services:
     networks:
       - 1panel-network
     restart: unless-stopped
+    # 日志轮换限制（吸收自上游 MicroWARP fafc131）：保留 3 个历史文件，每个最大 3MB，
+    # 防止 WARP 探测/服务日志长期运行撑爆宿主磁盘
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "3m"
+        max-file: "3"
 
 volumes:
   warp-data:
