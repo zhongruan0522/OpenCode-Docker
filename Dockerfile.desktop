@@ -28,6 +28,7 @@ ARG SARASA_VERSION=1.0.26
 # 颜色会被错误序列化为 @Variant(...\\x00*6) 即 RGB(0,0,0)，导致黑底黑字隐形
 # dbus-x11 + dbus + policykit-1：补齐系统总线，让 polkit/udisks2 正常工作
 # fcitx5 + fcitx5-chinese-addons + gtk3 前端提供中文输入法（XFCE 走 GTK）
+# plank：macOS 风格 dock（WhiteSur 主题自带配套 plank/dock.theme）
 # papirus-icon-theme：保留作为兜底图标（WhiteSur 图标上游失效时降级显示）
 # xfce4-notifyd：圆角通知守护，否则 fcitx5 切换提示丑陋
 # 说明：fonts-noto-cjk、libgtk-3-0、xdg-utils 已在 Base 层（headless 渲染也依赖），
@@ -49,6 +50,7 @@ RUN apt-get update \
         fcitx5 \
         fcitx5-frontend-gtk3 \
         fcitx5-chinese-addons \
+        plank \
         papirus-icon-theme \
     && usermod -aG ssl-cert xrdp \
     && rm -rf /var/lib/apt/lists/*
@@ -69,15 +71,18 @@ RUN sed -i \
     -e 's/^bitmap_cache=true/bitmap_cache=false/' \
     -e 's/^#\?tcp_send_buffer_bytes=.*/tcp_send_buffer_bytes=4194304/' \
     /etc/xrdp/xrdp.ini \
-    # 登录窗口配色（蓝色顶条 #0067c0 / 浅灰底 #f0f4f9），
+    # 登录窗口配色对齐 macOS（白底 #f5f5f7 + 蓝按钮 #0071e3），
     # 默认 xrdp 是 90 年代蓝（#000000 顶 + #003366 横条），与桌面割裂。
     # 值来源：xrdp wiki Login Authentication Window 章节配置项。
     && sed -i \
-        -e 's/^#\?ls_top_window_bg_color=.*/ls_top_window_bg_color=0067c0/' \
-        -e 's/^#\?ls_bg_color=.*/ls_bg_color=f0f4f9/' \
+        -e 's/^#\?ls_top_window_bg_color=.*/ls_top_window_bg_color=f5f5f7/' \
+        -e 's/^#\?ls_bg_color=.*/ls_bg_color=e8e8ed/' \
+        -e 's/^#\?ls_fg_color=.*/ls_fg_color=1d1d1f/' \
+        -e 's/^#\?ls_btn_fg_color=.*/ls_btn_fg_color=ffffff/' \
+        -e 's/^#\?ls_btn_bg_color=.*/ls_btn_bg_color=0071e3/' \
         -e 's/^#\?ls_logo_filename=.*/ls_logo_filename=/' \
         /etc/xrdp/xrdp.ini \
-    && echo "==> xrdp 登录界面配色已设置"
+    && echo "==> xrdp 登录界面配色已对齐 macOS"
 
 # ---
 # 3. Sarasa Gothic 更纱字体（低频，体积大头 1.9GB）
@@ -152,25 +157,43 @@ RUN git clone --depth 1 https://github.com/vinceliuice/WhiteSur-icon-theme.git /
     && echo "==> WhiteSur 图标主题已安装"
 
 # ---
-# 6. WhiteSur 壁纸（低频，与 GTK 主题配套）
+# 6. WhiteSur 指针主题（低频，macOS 观感收尾）
+# ---
+# 参考 https://github.com/vinceliuice/WhiteSur-cursors（macOS 风格黑指针）。
+# 上游 dist/ 是预构建产物，直接拷贝到 /usr/share/icons/WhiteSur-cursors。
+RUN git clone --depth 1 https://github.com/vinceliuice/WhiteSur-cursors.git /tmp/whitesur-cursors \
+    && rm -rf /usr/share/icons/WhiteSur-cursors \
+    && cp -r /tmp/whitesur-cursors/dist /usr/share/icons/WhiteSur-cursors \
+    && if [ ! -f /usr/share/icons/WhiteSur-cursors/index.theme ]; then \
+         echo "FATAL: /usr/share/icons/WhiteSur-cursors/index.theme missing" >&2; \
+         exit 1; \
+       fi \
+    && rm -rf /tmp/whitesur-cursors \
+    && echo "==> WhiteSur 指针主题已安装"
+
+# ---
+# 7. WhiteSur 壁纸（低频，与 GTK 主题配套）
 # ---
 # 参考 https://github.com/vinceliuice/WhiteSur-wallpapers。
 # 上游 4k JPG 直接拉取（不使用 install-wallpapers.sh，避免装满 4 套 × 3 色 × 3 分辨率 = 36 个文件）。
-# 仅取 WhiteSur-dark.jpg（与 GTK Dark 主题配套）和 WhiteSur-light.jpg（备用，便于用户切换）。
+# 仅取 WhiteSur.jpg（彩色白天版，macOS 默认观感，作默认壁纸）、
+# WhiteSur-dark.jpg（灰度单色设计，与 GTK Dark 主题配套）和 WhiteSur-light.jpg（备用）。
 RUN mkdir -p /usr/share/backgrounds/whitesur \
+    && curl -fsSL "https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur.jpg" \
+        -o /usr/share/backgrounds/whitesur/whitesur-wallpaper.jpg \
     && curl -fsSL "https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-dark.jpg" \
         -o /usr/share/backgrounds/whitesur/whitesur-wallpaper-dark.jpg \
     && curl -fsSL "https://raw.githubusercontent.com/vinceliuice/WhiteSur-wallpapers/main/4k/WhiteSur-light.jpg" \
         -o /usr/share/backgrounds/whitesur/whitesur-wallpaper-light.jpg \
     # 校验文件确实下载成功（非零大小）
-    && if [ ! -s /usr/share/backgrounds/whitesur/whitesur-wallpaper-dark.jpg ]; then \
-         echo "FATAL: whitesur-wallpaper-dark.jpg missing or empty" >&2; \
+    && if [ ! -s /usr/share/backgrounds/whitesur/whitesur-wallpaper.jpg ]; then \
+         echo "FATAL: whitesur-wallpaper.jpg missing or empty" >&2; \
          exit 1; \
        fi \
     && echo "==> WhiteSur 壁纸已安装"
 
 # ---
-# 7. desktop 用户（极少变动）
+# 8. desktop 用户（极少变动）
 # ---
 # 独立日常账号（可 sudo），作为推荐 RDP 登录账号。
 # 必须在 app 用户/组创建之后执行：usermod -aG app desktop 依赖 app 组已存在（app 组在 Base 层创建）。
@@ -182,29 +205,39 @@ RUN useradd --create-home --shell /bin/bash --uid 10002 desktop \
     && chmod 440 /etc/sudoers.d/desktop
 
 # ---
-# 8. 桌面环境配置 / 资源 / 快捷方式（desktop/，相对高频，放最后）
+# 9. 桌面环境配置 / 脚本 / 快捷方式（desktop/，相对高频，放最后）
 # ---
 # 桌面快捷方式：同时放入应用菜单和 opencode 专用启动器目录
 COPY desktop/launchers/opencode-*.desktop /usr/local/share/opencode-desktop-launchers/
 COPY desktop/launchers/opencode-*.desktop /usr/share/applications/
-# 桌面默认配置（GTK 主题=WhiteSur-Dark，图标=WhiteSur-dark，壁纸=WhiteSur-dark）：
-# - xfce-xsettings.xml：GTK 主题、图标主题、字体、Hinting、AntiAlias
-# - xfce-desktop.xml：默认壁纸路径
-# - xfwm4.xml：窗口管理器主题、标题按钮布局
-# - xfce4-panel.xml：任务栏位置/插件顺序（底部 48px + whiskermenu + tasklist + 托盘 + 时钟）
-#   缺它则 xfce4-panel 首启用 hardcoded 默认值（顶部 panel + 老 applicationsmenu），
+# 桌面默认配置（macOS WhiteSur 风格）：
+# - xfce-xsettings.xml：GTK 主题、图标主题、指针主题、字体、Hinting、AntiAlias
+# - xfce-desktop.xml：默认壁纸路径（彩色 Big Sur）
+# - xfwm4.xml：窗口管理器主题、左上角红绿灯按钮布局 CHM|、标题居中
+# - xfce4-panel.xml：双面板 macOS 结构（顶部菜单栏 + 底部 Dock 兜底栏）
+#   缺它则 xfce4-panel 首启用 hardcoded 默认值（顶部单面板 + 老 applicationsmenu），
 #   表现为"开始菜单在最顶上 + 桌面细节不对齐"——这是登录后视觉割裂的根因。
 COPY desktop/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
 COPY desktop/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 COPY desktop/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
 COPY desktop/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
-# 壁纸由第 6 段 curl 安装到 /usr/share/backgrounds/whitesur/（JPG 二进制不放仓库）
+# apple logo（WhiteSur 上游素材），供面板 Whisker 菜单按钮使用
+COPY desktop/apple-logo.svg /usr/share/icons/WhiteSur/panel-apple.svg
+# plank dock 主题：plank 查找 /usr/share/plank/themes/<ThemeName>/dock.theme，
+# WhiteSur 主题装在 /usr/share/themes/WhiteSur-Dark/plank/dock.theme，做目录软链对接
+RUN mkdir -p /usr/share/plank/themes \
+    && ln -sfn /usr/share/themes/WhiteSur-Dark/plank /usr/share/plank/themes/WhiteSur-Dark \
+    && if [ ! -f /usr/share/plank/themes/WhiteSur-Dark/dock.theme ]; then \
+         echo "FATAL: plank theme link broken" >&2; exit 1; \
+       fi \
+    && echo "==> plank dock 主题已挂载"
+# 壁纸由第 7 段 curl 安装到 /usr/share/backgrounds/whitesur/（JPG 二进制不放仓库）
 
 # ---
-# 9. 桌面启动脚本（desktop/ 中的桌面专属部分）
+# 10. 桌面启动脚本（desktop/ 中的桌面专属部分）
 # ---
 # init-desktop.sh：entrypoint 在 ENABLE_DESKTOP=1 时调用的 root 级桌面引导
-# xrdp-startwm.sh：xrdp 会话启动脚本（dbus + fcitx5 + XFCE4）
+# xrdp-startwm.sh：xrdp 会话启动脚本（dbus + fcitx5 + plank + XFCE4）
 COPY desktop/init-desktop.sh /usr/local/bin/init-desktop.sh
 COPY desktop/xrdp-startwm.sh /etc/xrdp/startwm.sh
 

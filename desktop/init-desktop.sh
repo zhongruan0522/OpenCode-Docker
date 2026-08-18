@@ -17,6 +17,64 @@ XSESSION_EOF
     chmod 644 "${target_home}/.xsession"
 }
 
+# plank dock 的用户级设置（dconf 键值）。
+# plank 无系统级全局配置文件，读取每个用户的 dconf（net.launchpad.plank）。
+# 这里用 dconf update 机制写入 /etc/dconf/db/local.d/（系统级默认值），
+# 用户 home 里的 dconf 若无显式设置则回落到这些默认。
+configure_plank_defaults() {
+    # plank 属于 GSettings（dconf）应用，需要 profiles 目录
+    mkdir -p /etc/dconf/profile /etc/dconf/db/local.d
+    cat > /etc/dconf/profile/user <<'PROFILE_EOF'
+user-db:user
+system-db:local
+PROFILE_EOF
+
+    # macOS 风格 dock 参数：贴底居中、48px 图标、WhiteSur-Dark 圆角半透明主题
+    cat > /etc/dconf/db/local.d/00-plank <<'PLANK_EOF'
+[net/launchpad/plank/docks/dock1]
+theme='WhiteSur-Dark'
+mode='bottom'
+hide-mode='intelligent'
+position-alignment='center'
+icon-size=48
+zoom-enabled=false
+show-dock-item=false
+pinned-only=false
+auto-pinning=true
+lock-items=false
+tooltips-enabled=true
+PLANK_EOF
+
+    dconf update
+    echo "==> [Desktop] plank dock 系统级默认已写入（WhiteSur-Dark / 底部居中 / 48px）"
+}
+
+# 为 RDP 登录用户预置 plank 常驻应用（.dockitem 文件），
+# 与底部 Dock 面板 launcher 保持一致：终端/工作区/浏览器/code-server/OpenCode
+install_plank_launchers_for_user() {
+    local target_home="$1"
+    local target_user="$2"
+    local target_config_dir="${target_home}/.config/plank/dock1/launchers"
+
+    mkdir -p "${target_config_dir}"
+    local desktop_entry launcher_name
+    for desktop_entry in \
+        opencode-terminal.desktop \
+        opencode-workspace.desktop \
+        opencode-browser.desktop \
+        opencode-code-server.desktop \
+        opencode-webui.desktop; do
+        launcher_name="${desktop_entry%.desktop}.dockitem"
+        cat > "${target_config_dir}/${launcher_name}" <<DOCKITEM_EOF
+[PlankDockItemPreferences]
+Launcher=file://usr/share/applications/${desktop_entry}
+DOCKITEM_EOF
+    done
+    chown -R "${target_user}:${target_user}" "${target_home}/.config/plank"
+    # 首启固定（lock），防止拖拽丢失；用户可自行解锁调整
+    echo "==> [Desktop] plank launchers 已预置到 ${target_user}"
+}
+
 configure_desktop_login_users() {
     if [ -n "${DESKTOP_USER_PASSWORD:-}" ]; then
         echo "desktop:${DESKTOP_USER_PASSWORD}" | chpasswd
@@ -106,6 +164,14 @@ install_desktop_launchers() {
     fi
 }
 
+install_plank_launchers() {
+    install_plank_launchers_for_user /home/desktop desktop
+
+    if [ "${ALLOW_APP_DESKTOP:-1}" = "1" ]; then
+        install_plank_launchers_for_user /home/app app
+    fi
+}
+
 start_xrdp_services() {
     xrdp-sesman
     xrdp
@@ -119,10 +185,12 @@ main() {
     echo "==> [Desktop] 初始化 xrdp + XFCE4 远程桌面..."
 
     configure_desktop_login_users
+    configure_plank_defaults
     start_system_dbus_for_desktop
     prepare_xrdp_runtime_directories
     prepare_xdg_runtime_directories
     install_desktop_launchers
+    install_plank_launchers
     start_xrdp_services
 }
 
