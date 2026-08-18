@@ -67,10 +67,14 @@ install_plank_launchers_for_user() {
         launcher_name="${desktop_entry%.desktop}.dockitem"
         cat > "${target_config_dir}/${launcher_name}" <<DOCKITEM_EOF
 [PlankDockItemPreferences]
-Launcher=file://usr/share/applications/${desktop_entry}
+Launcher=file:///usr/share/applications/${desktop_entry}
 DOCKITEM_EOF
     done
     chown -R "${target_user}:${target_user}" "${target_home}/.config/plank"
+    # 关键：mkdir -p 以 root 身份创建了 ~/.config，其属主是 root。
+    # 若不归还给用户，登录时 xfconfd 无权在 ~/.config/xfce4 下建目录而启动失败，
+    # 桌面报 "Unable to determine failsafe session name / xfconfd isn't running"。
+    chown "${target_user}:${target_user}" "${target_home}/.config"
     # 首启固定（lock），防止拖拽丢失；用户可自行解锁调整
     echo "==> [Desktop] plank launchers 已预置到 ${target_user}"
 }
