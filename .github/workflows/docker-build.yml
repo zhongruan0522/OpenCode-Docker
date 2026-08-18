@@ -50,7 +50,47 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  changes:
+    # 跨层同 push 竞态保护：若本次 push 同时改动了 Base/桌面层归属文件，
+    # 则跳过本 workflow 的 push 直接触发，由底层构建完成后的级联按序重建，
+    # 避免 FROM :desktop 时下层镜像尚未推送而报 not found。
+    # workflow_dispatch（含级联派发）不走此判断：派发时下层镜像必已推送。
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check if lower layers changed in this push
+        id: check
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          # push 事件必带 before（分支前一 tip）；为零值/不可达时 diff 直接报错，不做兜底
+          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
+          echo "Files changed in this push:"
+          echo "$CHANGED"
+          # Base 层 + 桌面层归属路径（上层镜像 FROM 它们，同 push 变动即存在竞态）
+          LOWER_RE='^(Dockerfile\.base|base/|docker/(entrypoint\.sh|healthcheck\.sh|supervisord\.conf|init-warp\.sh)|Dockerfile\.desktop|desktop/|docker/(init-desktop\.sh|xrdp-startwm\.sh))'
+          if grep -qE "$LOWER_RE"; then
+            echo "Lower-layer files changed in same push; skip direct trigger, cascade will rebuild."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Non-push events never skip
+        if: github.event_name != 'push'
+        run: echo "skip=false" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: changes
+    if: needs.changes.outputs.skip != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
