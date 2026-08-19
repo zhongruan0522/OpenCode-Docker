@@ -47,6 +47,7 @@ services:
       - WARP_BYPASS_CIDRS=${WARP_BYPASS_CIDRS:-} # 额外绕过 WARP 的 CIDR 列表
       - MTU=${MTU:-1280} # WireGuard MTU，小 MTU 链路（PPPoE 等）避免分片
       - KEEPALIVE=${KEEPALIVE:-15} # WireGuard PersistentKeepalive 秒数，对抗 NAT/QoS 空闲断流
+      - ENABLE_WARP_IPV6=${ENABLE_WARP_IPV6:-0} # 双栈 WARP 出口（IPv4+IPv6），1=启用（需宿主网络支持 IPv6）
       # MicroWARP - MASQUE 协议（TUNNEL_PROTOCOL=masque 时生效）
       - MASQUE_PROXY_MODE=${MASQUE_PROXY_MODE:-l4-socks} # l4-socks（轻量 TCP-only，推荐）| socks（完整 gVisor L3，TCP+UDP）
       - MASQUE_HTTP2=${MASQUE_HTTP2:-0} # 1 = TCP/HTTP2 回退（需 MASQUE_PROXY_MODE=socks）

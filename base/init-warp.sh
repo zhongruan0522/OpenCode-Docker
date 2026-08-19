@@ -20,6 +20,10 @@ warp_ok()   { echo "==> [WARP] ✅ WARP 代理启动成功"; }
 warp_fail() { echo "==> [WARP] ❌ WARP 代理启动失败 (日志: $_EXEC_LOG)"; exit 1; }
 
 WG_CONF="/etc/wireguard/wg0.conf"
+# wgcf 注册得到的 IPv6 地址镜像缓存：sanitize 每次都会原地重写 wg0.conf，
+# 纯 IPv4 模式跑一次后 Address 行的 v6 地址即被删除；镜像到本文件（同卷持久化）
+# 后，后续开启 ENABLE_WARP_IPV6=1 可直接恢复双栈，无需删卷重新注册。
+WG_V6_CACHE="/etc/wireguard/wg0.v6addr"
 WARP_SOCKS_PORT="${WARP_SOCKS_PORT:-1080}"
 WARP_SOCKS_BIND="${WARP_SOCKS_BIND:-0.0.0.0}"
 
@@ -30,6 +34,9 @@ CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
 # WireGuard 调优参数（吸收自上游 904e9c1）
 WG_MTU="${MTU:-1280}"
 KEEPALIVE="${KEEPALIVE:-15}"
+
+# 双栈 WARP（IPv4+IPv6 出口），默认 0 保持纯 IPv4；
+# 运行时用 is_truthy "${ENABLE_WARP_IPV6:-0}" 判定，避免在 is_truthy 定义前求值
 
 # MASQUE / usque（吸收自上游 8045ba9 / d71f750）
 # 配置与 WireGuard 同置于 /etc/wireguard，warp-data 卷可同时持久化两种协议身份
@@ -44,7 +51,9 @@ USQUE_DEVICE_NAME="${USQUE_DEVICE_NAME:-MicroWARP}"
 # 小内存宿主机上约束 Go 运行时 RSS（仅 MASQUE 路径生效）
 GOMEMLIMIT="${GOMEMLIMIT:-512MiB}"
 
-mkdir -p /etc/wireguard
+# 注意：所有立即执行语句统一收口到 main()，函数定义区不放裸命令。
+# 原因：set -e 下 dash/bash 分块读取脚本时，定义区中间的外部命令（如 mkdir）
+# 会改变脚本文件读偏移，导致其后定义的函数在 $( ) 子 shell 中查不到（127）。
 
 # ==========================================
 # 工具函数
@@ -114,6 +123,20 @@ is_truthy() {
         1|true|yes|on) return 0 ;;
         *) return 1 ;;
     esac
+}
+
+# 提取首个 IPv6 CIDR（逗号/空格分隔，含 ':' 的 token）
+extract_ipv6_cidr() {
+    printf '%s\n' "$1" \
+        | tr ',' '\n' | tr ' ' '\n' \
+        | grep -E '^[0-9a-fA-F:]+/[0-9]{1,3}$' \
+        | grep ':' \
+        | head -n 1
+}
+
+# wg0 是否已有全局 IPv6 地址（无则探测跳过，上游 857c7a3）
+iface_has_global_ipv6() {
+    ip -6 addr show dev "$1" scope global 2>/dev/null | grep -q 'inet6 '
 }
 
 normalize_tunnel_protocol() {
@@ -203,6 +226,36 @@ sanitize_wg_config() {
     # 智能提取纯 IPv4 地址，防止双栈 IP 写在同一行导致误杀
     IPV4_ADDR=$(grep '^Address' "$WG_CONF" \
         | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' | head -n 1)
+    if [ -z "$IPV4_ADDR" ]; then
+        echo "==> [WARP] ❌ 无法从配置解析 IPv4 Address，配置可能已损坏" >&2
+        exit 1
+    fi
+
+    # ENABLE_WARP_IPV6=1 时提取 IPv6 地址，构建双栈 Address。
+    # 提取顺序：当前配置 → v6 缓存（历史注册时镜像保存），都无则告警降级纯 IPv4。
+    ADDRESS_VALUE="$IPV4_ADDR"
+    IPV6_ADDR=""
+    if is_truthy "${ENABLE_WARP_IPV6:-0}"; then
+        IPV6_ADDR=$(extract_ipv6_cidr "$(grep '^Address' "$WG_CONF")")
+        if [ -z "$IPV6_ADDR" ] && [ -f "$WG_V6_CACHE" ]; then
+            IPV6_ADDR=$(head -n 1 "$WG_V6_CACHE" 2>/dev/null || true)
+            [ -n "$IPV6_ADDR" ] && warp_log "从缓存 ${WG_V6_CACHE} 恢复 IPv6 地址: $IPV6_ADDR"
+        fi
+        if [ -n "$IPV6_ADDR" ]; then
+            ADDRESS_VALUE="${IPV4_ADDR},${IPV6_ADDR}"
+            warp_log "双栈地址: IPv4=${IPV4_ADDR} IPv6=${IPV6_ADDR}"
+        else
+            echo "==> [WARP] ⚠️  ENABLE_WARP_IPV6=1 但配置与缓存均无 IPv6 地址，仅启用 IPv4" >&2
+        fi
+    fi
+
+    # 注册得到的 v6 地址镜像到缓存（配置里有而缓存缺失/过期时刷新），
+    # 确保纯 IPv4 模式的 sanitize 重写不会永久丢失 v6 身份。
+    CONF_V6_ADDR=$(extract_ipv6_cidr "$(grep '^Address' "$WG_CONF")")
+    if [ -n "$CONF_V6_ADDR" ] && [ "$CONF_V6_ADDR" != "$(cat "$WG_V6_CACHE" 2>/dev/null || true)" ]; then
+        printf '%s\n' "$CONF_V6_ADDR" > "$WG_V6_CACHE" 2>/dev/null \
+            || echo "==> [WARP] ⚠️  IPv6 地址缓存写入失败（${WG_V6_CACHE}），不影响当前启动" >&2
+    fi
 
     # 物理删除原始 Address/AllowedIPs/DNS/MTU
     sed -i '/^Address/d'       "$WG_CONF"
@@ -211,10 +264,8 @@ sanitize_wg_config() {
     # 清除可能存在的旧 MTU（兼容 Busybox 正则）
     sed -i '/^[Mm][Tt][Uu].*/d' "$WG_CONF"
 
-    # 重建 IPv4 地址
-    if [ -n "$IPV4_ADDR" ]; then
-        sed -i "/\[Interface\]/a Address = $IPV4_ADDR" "$WG_CONF"
-    fi
+    # 重建地址（双栈或纯 IPv4）
+    sed -i "/\[Interface\]/a Address = $ADDRESS_VALUE" "$WG_CONF"
 
     # 动态注入 MTU，默认 1280 避免 PPPoE/IPIP 等小 MTU 链路分片（上游 904e9c1）
     warp_log "MTU 值设置为: $WG_MTU"
@@ -222,11 +273,21 @@ sanitize_wg_config() {
 
     # 保留 AllowedIPs = 0.0.0.0/0，让 wg-quick 接管默认公网出站到 WARP。
     # 后面仅为私网/本地回程补更具体的绕过路由，满足"公网全走 WARP，本地地址不走"。
-    sed -i "/\[Peer\]/a AllowedIPs = 0.0.0.0\/0" "$WG_CONF"
+    # 双栈时追加 ::/0（由 $IPV6_ADDR 非空保证配置侧已有 v6 地址）。
+    if is_truthy "${ENABLE_WARP_IPV6:-0}" && [ -n "${IPV6_ADDR:-}" ]; then
+        sed -i "/\[Peer\]/a AllowedIPs = 0.0.0.0\/0,::\/0" "$WG_CONF"
+    else
+        sed -i "/\[Peer\]/a AllowedIPs = 0.0.0.0\/0" "$WG_CONF"
+    fi
 
     # wg-quick 在 Debian 上不会出现 src_valid_mark 问题，但保险起见做检查
     if command -v wg-quick >/dev/null 2>&1; then
         WG_QUICK_BIN=$(command -v wg-quick)
+        # 双栈时先确保内核允许 IPv6（部分基础镜像默认 disable_ipv6=1）
+        if is_truthy "${ENABLE_WARP_IPV6:-0}" && [ -n "${IPV6_ADDR:-}" ]; then
+            sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1 || true
+            sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null 2>&1 || true
+        fi
         if grep -q 'src_valid_mark' "$WG_QUICK_BIN" 2>/dev/null; then
             sed -i '/src_valid_mark/d' "$WG_QUICK_BIN"
         fi
@@ -240,6 +301,7 @@ sanitize_wg_config() {
     fi
 
     # 自定义 Endpoint IP，用于绕过某些机房的 QoS 限制
+    # 注意：set -e 下函数若以 [ -n ] 假分支结尾会返回非零、误杀整个脚本，显式 return 0
     if [ -n "${ENDPOINT_IP:-}" ]; then
         warp_log "检测到自定义 Endpoint: $ENDPOINT_IP"
         if grep -qi '^[[:space:]]*Endpoint[[:space:]]*=' "$WG_CONF"; then
@@ -248,6 +310,7 @@ sanitize_wg_config() {
             sed -i "/\[Peer\]/a Endpoint = ${ENDPOINT_IP}" "$WG_CONF"
         fi
     fi
+    return 0
 }
 
 # ==========================================
@@ -263,7 +326,14 @@ start_wireguard() {
         | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") print $(i + 1)}')
 
     warp_log "正在启动内核级 wg0 网卡..."
-    wg-quick up wg0 > /dev/null 2>&1
+    # wg-quick 失败时把输出落盘到 _EXEC_LOG 并打印关键行，错误必须暴露；
+    # IPv6 场景失败常见于宿主无 v6 支持，提示可设 ENABLE_WARP_IPV6=0 回退。
+    if ! wg-quick up wg0 > "$_EXEC_LOG" 2>&1; then
+        echo "==> [WARP] ❌ wg-quick up wg0 失败（日志: $_EXEC_LOG）：" >&2
+        tail -n 20 "$_EXEC_LOG" >&2
+        echo "==> [WARP] ❌ 若为 IPv6 相关报错，可设 ENABLE_WARP_IPV6=0 回退纯 IPv4" >&2
+        warp_fail
+    fi
 
     # ==========================================
     # 阶段 3.5：补私网绕过路由
@@ -284,6 +354,19 @@ start_wireguard() {
             fi
         done
 
+        # 双栈时为 IPv6 ULA/链路本地补绕过路由（镜像无 v6 默认网关场景常见为空，容错跳过）
+        if is_truthy "${ENABLE_WARP_IPV6:-0}"; then
+            PRE_DEFAULT_GW_V6=$(ip -6 route show default 2>/dev/null | head -n 1 \
+                | awk '{for (i = 1; i <= NF; i++) if ($i == "via") print $(i + 1)}')
+            if [ -n "$PRE_DEFAULT_GW_V6" ]; then
+                for cidr in fd00::/8 fe80::/10; do
+                    if ip -6 route replace "$cidr" via "$PRE_DEFAULT_GW_V6" dev "$PRE_DEFAULT_DEV" > /dev/null 2>&1; then
+                        warp_log "已添加 IPv6 绕过路由: $cidr via $PRE_DEFAULT_GW_V6"
+                    fi
+                done
+            fi
+        fi
+
         # Docker 发布端口的公网入站连接会 DNAT 到容器主网卡地址。
         # 响应包源地址固定为该主网卡地址，必须回到宿主网关，不能被 WARP 默认策略路由接走。
         PRE_DEFAULT_SRC=$(ip -o -4 addr show dev "$PRE_DEFAULT_DEV" scope global \
@@ -292,6 +375,21 @@ start_wireguard() {
             if ! ip rule show | grep -q "from ${PRE_DEFAULT_SRC} lookup main"; then
                 if ip rule add pref 100 from "$PRE_DEFAULT_SRC/32" lookup main > /dev/null 2>&1; then
                     warp_log "已添加入站服务回程策略: from $PRE_DEFAULT_SRC lookup main"
+                fi
+            fi
+        fi
+
+        # 双栈时为容器原生 IPv6 全局地址补对称回程策略：::/0 被 wg0 接管后，
+        # 来自容器 v6 地址的响应包必须走原网关而非 WARP，否则 v6 入站服务的
+        # 回包会被 WARP 默认路由接走形成非对称黑洞（对应 IPv4 侧的 lookup main）。
+        if is_truthy "${ENABLE_WARP_IPV6:-0}"; then
+            PRE_DEFAULT_SRC_V6=$(ip -o -6 addr show dev "$PRE_DEFAULT_DEV" scope global \
+                | awk 'NR == 1 { split($4, addr, "/"); print addr[1] }')
+            if [ -n "$PRE_DEFAULT_SRC_V6" ]; then
+                if ! ip -6 rule show | grep -q "from ${PRE_DEFAULT_SRC_V6} lookup main"; then
+                    if ip -6 rule add pref 100 from "$PRE_DEFAULT_SRC_V6" lookup main > /dev/null 2>&1; then
+                        warp_log "已添加 IPv6 入站服务回程策略: from $PRE_DEFAULT_SRC_V6 lookup main"
+                    fi
                 fi
             fi
         fi
@@ -447,6 +545,15 @@ start_masque_socks() {
         fi
     fi
 
+    # IPv6 隧道开关：完整 socks 模式且 usque 构建支持 --no-tunnel-ipv6 时生效（上游 8045ba9）
+    if [ "$proxy_mode" = "socks" ]; then
+        if ! is_truthy "${ENABLE_WARP_IPV6:-0}"; then
+            if usque socks --help 2>&1 | grep -q 'no-tunnel-ipv6'; then
+                set -- "$@" --no-tunnel-ipv6
+            fi
+        fi
+    fi
+
     warp_log "usque ${proxy_mode} 监听 ${WARP_SOCKS_BIND}:${WARP_SOCKS_PORT}"
     "$@" &
     usque_pid=$!
@@ -476,12 +583,28 @@ detect_exit_ip() {
         --proxy "socks5://127.0.0.1:${WARP_SOCKS_PORT}" \
         https://1.1.1.1/cdn-cgi/trace 2>/dev/null \
         | grep -oE 'ip=[0-9.]+' | cut -d= -f2 || true)
+
+    # 双栈时追加 IPv6 出口探测；MASQUE 为用户态隧道无 wg0 网卡，不能以其作前置条件
+    _WARP_EXIT_IP_V6=""
+    if is_truthy "${ENABLE_WARP_IPV6:-0}"; then
+        if [ "$(normalize_tunnel_protocol "$TUNNEL_PROTOCOL")" != "wireguard" ] || iface_has_global_ipv6 wg0; then
+            # socks5://（本地解析）使 --resolve 映射生效；socks5h:// 会把域名
+            # 交给代理端解析，本地 --resolve 被绕过，探测不再受控走 v6。
+            _WARP_EXIT_IP_V6=$(curl -6 -sS --connect-timeout 2 -m 5 \
+                --resolve www.cloudflare.com:443:2606:4700::11 \
+                --proxy "socks5://127.0.0.1:${WARP_SOCKS_PORT}" \
+                https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null \
+                | grep -oE 'ip=[0-9a-f:]+' | cut -d= -f2 || true)
+        fi
+    fi
 }
 
 # ==========================================
 # Main
 # ==========================================
 main() {
+    mkdir -p /etc/wireguard
+
     proto="$(normalize_tunnel_protocol "$TUNNEL_PROTOCOL")"
 
     case "$proto" in
@@ -494,9 +617,14 @@ main() {
 
     detect_exit_ip
     if [ -n "$_WARP_EXIT_IP" ]; then
-        echo "==> [WARP] 出口 IP: $_WARP_EXIT_IP"
+        echo "==> [WARP] 出口 IPv4: $_WARP_EXIT_IP"
     else
-        echo "==> [WARP] 出口 IP: 获取超时"
+        echo "==> [WARP] 出口 IPv4: 获取超时"
+    fi
+    if [ -n "${_WARP_EXIT_IP_V6:-}" ]; then
+        echo "==> [WARP] 出口 IPv6: $_WARP_EXIT_IP_V6"
+    elif is_truthy "${ENABLE_WARP_IPV6:-0}"; then
+        echo "==> [WARP] 出口 IPv6: 获取超时（隧道未就绪或 wg0 无全局 v6 地址）"
     fi
 }
 
