@@ -119,12 +119,12 @@ services:
     networks:
       - 1panel-network
     restart: unless-stopped
-    # 日志轮换限制（吸收自上游 MicroWARP fafc131）：保留 3 个历史文件，每个最大 3MB，
-    # 防止 WARP 探测/服务日志长期运行撑爆宿主磁盘
+    # 日志轮换限制（吸收自上游 MicroWARP fafc131）：保留 3 个历史文件，每个最大 350MB，
+    # 总预算约 1GB——既避免 WARP 探测/服务日志长期运行撑爆宿主磁盘，又保留足够的排查历史
     logging:
       driver: "json-file"
       options:
-        max-size: "3m"
+        max-size: "350m"
         max-file: "3"
 
 volumes:
