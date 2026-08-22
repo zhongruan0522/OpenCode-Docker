@@ -222,6 +222,18 @@ jobs:
           fi
           echo "codex-security: $CXS_VERSION"
 
+          # --- Antigravity CLI 版本 ---
+          # 上游清单永远只暴露最新版（无历史版本可锁），因此不设 workflow_dispatch 入参、
+          # 也不读 release 锁定值，每次构建实时查清单：取到的版本既写入 release 标记，
+          # 也作为 ARG 传给 Dockerfile 充当缓存 key（agy 升级时使其安装层失效重建）。
+          ANTIGRAVITY_VERSION=$(curl -fsSL --retry 10 --retry-all-errors --retry-delay 2 \
+            https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json | jq -r '.version')
+          if [ -z "$ANTIGRAVITY_VERSION" ] || [ "$ANTIGRAVITY_VERSION" = "null" ]; then
+            echo "Antigravity CLI version was not resolved from upstream manifest" >&2
+            exit 1
+          fi
+          echo "Antigravity CLI: $ANTIGRAVITY_VERSION"
+
           echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
           echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
           echo "cs_version=$CS_VERSION" >> $GITHUB_OUTPUT
@@ -258,6 +270,7 @@ jobs:
             <!-- serena-version=${{ steps.version.outputs.serena_version }} -->
             <!-- claude-code-version=${{ steps.version.outputs.cc_version }} -->
             <!-- codex-security-version=${{ steps.version.outputs.cxs_version }} -->
+            <!-- antigravity-version=${{ steps.version.outputs.antigravity_version }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -290,6 +303,7 @@ jobs:
             SERENA_VERSION=${{ steps.version.outputs.serena_version }}
             CLAUDE_CODE_VERSION=${{ steps.version.outputs.cc_version }}
             CODEX_SECURITY_VERSION=${{ steps.version.outputs.cxs_version }}
+            ANTIGRAVITY_VERSION=${{ steps.version.outputs.antigravity_version }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

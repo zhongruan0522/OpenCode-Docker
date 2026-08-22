@@ -23,7 +23,8 @@
 #   4. Claude Code   ← npm，中高频
 #   4.5 CC 补丁       ← agent/ccpatch/*.sh，中低频（紧跟 CC 层，CC 升级时自动对最新 cli.js 重跑）
 #   5. codex-security ← npm，高频（0.x 早期阶段，迭代极快）
-#   6. opencode      ← npm，最高频（用户感知最强的小版本迭代）
+#   6. Antigravity    ← 官方清单最新版二进制直装，高频（1.x 早期阶段）
+#   7. opencode       ← npm，最高频（用户感知最强的小版本迭代）
 #
 # 拆分 npm 层后，单个 npm 包升级只重建自己一层，不影响其他 npm 包缓存。
 
@@ -36,6 +37,7 @@ ARG CODEX_VERSION=latest
 ARG SERENA_VERSION=latest
 ARG CLAUDE_CODE_VERSION=latest
 ARG CODEX_SECURITY_VERSION=latest
+ARG ANTIGRAVITY_VERSION=latest
 
 # === 1. code-server（apt deb，中低频）===
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -79,7 +81,35 @@ RUN chmod +x /usr/local/bin/run-ccpatch.sh \
 # OpenAI Codex Security CLI，仅 npm 分发：https://www.npmjs.com/package/@openai/codex-security
 RUN npm install -g @openai/codex-security@${CODEX_SECURITY_VERSION}
 
-# === 6. opencode（最高频，必须排最后）===
+# === 6. Antigravity CLI（agy，官方清单直装，高频）===
+# 安装流程等价官方 bootstrapper（curl -fsSL https://antigravity.google/cli/install.sh | bash）：
+# 清单 → 下载 → SHA512 校验 → 落盘 /usr/local/bin/agy。三点与 npm 组件不同：
+# - 无历史版本可锁：manifests/linux_amd64.json 永远只返回最新版（version/url/sha512），
+#   因此 ARG 仅作缓存 key（CI 每次构建前实时查清单传入），使 agy 自身升级能失效本层；
+#   构建期若清单已比 ARG 新，说明上游在构建间隙发了新版——告警后照装最新版
+#   （清单装不了旧版，严格报错会拖垮所有底层级联重建；元数据漂移由下轮 check-update 自愈）。
+# - GCS 下载链路实测存在 403/200 交替抖动（与 UA 无关），必须 --retry-all-errors 才能稳定下载。
+# - 包内是单个二进制 antigravity（解压后约 197MB），安装+清理必须同一 RUN 完成以回收空间。
+RUN set -eux \
+    && AGY_ARCH="$(dpkg --print-architecture)" \
+    && case "${AGY_ARCH}" in amd64|arm64) ;; *) echo "Unsupported Antigravity CLI architecture: ${AGY_ARCH}" >&2; exit 1 ;; esac \
+    && curl -fsSL --retry 10 --retry-all-errors --retry-delay 2 -o /tmp/agy-manifest.json \
+        "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_${AGY_ARCH}.json" \
+    && AGY_LATEST="$(jq -r '.version' /tmp/agy-manifest.json)" \
+    && AGY_URL="$(jq -r '.url' /tmp/agy-manifest.json)" \
+    && AGY_SHA512="$(jq -r '.sha512' /tmp/agy-manifest.json)" \
+    && if [ -z "${AGY_LATEST}" ] || [ -z "${AGY_URL}" ] || [ -z "${AGY_SHA512}" ]; then \
+        echo "Malformed Antigravity CLI manifest" >&2; exit 1; fi \
+    && if [ "${ANTIGRAVITY_VERSION}" != "latest" ] && [ "${ANTIGRAVITY_VERSION}" != "${AGY_LATEST}" ]; then \
+        echo "WARNING: requested Antigravity CLI ${ANTIGRAVITY_VERSION}, but upstream manifest serves ${AGY_LATEST}; installing ${AGY_LATEST}" >&2; fi \
+    && curl -fsSL --retry 10 --retry-all-errors --retry-delay 2 -o /tmp/agy.tar.gz "${AGY_URL}" \
+    && echo "${AGY_SHA512}  /tmp/agy.tar.gz" | sha512sum -c - \
+    && tar -xzf /tmp/agy.tar.gz -C /tmp \
+    && install -m 0755 /tmp/antigravity /usr/local/bin/agy \
+    && /usr/local/bin/agy --version \
+    && rm -rf /tmp/agy-manifest.json /tmp/agy.tar.gz /tmp/antigravity
+
+# === 7. opencode（最高频，必须排最后）===
 # rm -rf 必须与 install 在同一 RUN 内：Docker 层叠加，
 # 在新层里删除上一层添加的文件不会回收空间，必须安装+删除在同一层完成。
 RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
