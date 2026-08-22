@@ -233,6 +233,7 @@ jobs:
             exit 1
           fi
           echo "Antigravity CLI: $ANTIGRAVITY_VERSION"
+          echo "antigravity_version=$ANTIGRAVITY_VERSION" >> $GITHUB_OUTPUT
 
           echo "oc_tag=$OC_TAG" >> $GITHUB_OUTPUT
           echo "oc_version=$OC_VERSION" >> $GITHUB_OUTPUT
