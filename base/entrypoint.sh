@@ -50,20 +50,11 @@ fi
 # ==========================================
 # GitHub CLI 配置
 # ==========================================
-if [ -n "$GITHUB_TOKEN" ]; then
-    echo "Configuring GitHub CLI with provided token..."
-    GITHUB_AUTH_TIMEOUT="${GITHUB_AUTH_TIMEOUT:-20s}"
-    mkdir -p /home/app/.config/gh
-    if echo "$GITHUB_TOKEN" | timeout "$GITHUB_AUTH_TIMEOUT" gh auth login --with-token >/dev/null 2>&1; then
-        if timeout "$GITHUB_AUTH_TIMEOUT" gh auth setup-git >/dev/null 2>&1; then
-            echo "GitHub login success."
-        else
-            echo "GitHub login success, but gh auth setup-git failed or timed out after ${GITHUB_AUTH_TIMEOUT}."
-        fi
-    else
-        echo "GitHub login failed or timed out after ${GITHUB_AUTH_TIMEOUT}."
-    fi
-fi
+# gh 已不再通过 GITHUB_TOKEN 环境变量自动登录（历史方案已移除：
+# 环境变量登录在实际使用中不稳定）。认证改走持久化配置卷：
+# 首次使用时手动执行 `gh auth login`，凭据落在 ~/.config/gh
+# （compose 已挂载 ./.config/gh 卷），容器重建后依然保持登录态。
+# gh CLI 本体仍预装在 base 层，可正常使用。
 
 if [ -n "$GITHUB_SSH_KEY" ]; then
     echo "Configuring GitHub SSH key..."

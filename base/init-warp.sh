@@ -159,6 +159,8 @@ normalize_masque_proxy_mode() {
 
 # ==========================================
 # WireGuard 路径 - 阶段 1：自动注册 Cloudflare WARP 设备
+# 失败统一 return 1 而非 exit：裸调用点在 set -e 下行为不变（脚本同样退出），
+# 双栈重注册调用点（if 捕获）则可回滚旧身份降级继续。
 # ==========================================
 register_warp() {
     warp_log "未检测到配置，正在全自动初始化 Cloudflare WARP..."
@@ -167,19 +169,19 @@ register_warp() {
     case "$ARCH" in
         x86_64)  WGCF_ARCH="amd64" ;;
         aarch64) WGCF_ARCH="arm64" ;;
-        *) echo "==> [WARP] ❌ 不支持的架构: $ARCH"; exit 1 ;;
+        *) echo "==> [WARP] ❌ 不支持的架构: $ARCH" >&2; return 1 ;;
     esac
 
     WGCF_VER="$(fetch_latest_wgcf_version)"
     warp_log "wgcf 版本: v${WGCF_VER} (${WGCF_ARCH})"
 
     # mktemp 隔离工作目录，注册材料阅后即焚（上游 5655bd6）
-    workdir="$(mktemp -d /tmp/microwarp.XXXXXX)" || exit 1
+    workdir="$(mktemp -d /tmp/microwarp.XXXXXX)" || return 1
 
     if ! download_file "$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")" "$workdir/wgcf"; then
         rm -rf "$workdir"
         echo "==> [WARP] ❌ wgcf 二进制下载失败" >&2
-        exit 1
+        return 1
     fi
     chmod +x "$workdir/wgcf"
 
@@ -192,19 +194,20 @@ register_warp() {
     ); then
         rm -rf "$workdir"
         echo "==> [WARP] ❌ wgcf 注册或配置生成失败" >&2
-        exit 1
+        return 1
     fi
 
     if [ ! -f "$workdir/wgcf-profile.conf" ]; then
         rm -rf "$workdir"
         echo "==> [WARP] ❌ 未找到 wgcf-profile.conf，注册可能失败" >&2
-        exit 1
+        return 1
     fi
 
     mv "$workdir/wgcf-profile.conf" "$WG_CONF"
     # 阅后即焚：删除注册工具和账号明文
     rm -rf "$workdir"
     warp_log "节点配置生成成功！"
+    return 0
 }
 
 # ==========================================
@@ -232,7 +235,7 @@ sanitize_wg_config() {
     fi
 
     # ENABLE_WARP_IPV6=1 时提取 IPv6 地址，构建双栈 Address。
-    # 提取顺序：当前配置 → v6 缓存（历史注册时镜像保存），都无则告警降级纯 IPv4。
+    # 提取顺序：当前配置 → v6 缓存（历史注册时镜像保存），都无则触发重注册补救。
     ADDRESS_VALUE="$IPV4_ADDR"
     IPV6_ADDR=""
     if is_truthy "${ENABLE_WARP_IPV6:-0}"; then
@@ -241,11 +244,44 @@ sanitize_wg_config() {
             IPV6_ADDR=$(head -n 1 "$WG_V6_CACHE" 2>/dev/null || true)
             [ -n "$IPV6_ADDR" ] && warp_log "从缓存 ${WG_V6_CACHE} 恢复 IPv6 地址: $IPV6_ADDR"
         fi
+
+        # v6 身份丢失兜底：ENABLE_WARP_IPV6=1 但配置与缓存均无 v6 地址——
+        # 说明现存身份是被旧版 sanitize 重写过的（物理删除 Address 行的 v6 段），
+        # 且早于 v6 缓存机制（wg0.v6addr）部署，v6 已永久丢失无法从存量材料恢复。
+        # 唯一恢复途径：备份旧配置 → 删除身份重新注册（wgcf 新身份自带双栈 v4+v6）
+        # → 校验新配置确实含 v6 → 覆盖生效；失败则回滚旧配置降级纯 IPv4 继续。
+        # 注意：重注册会消耗一次 Cloudflare 设备注册配额（有速率限制），仅在用户
+        # 显式要求双栈时触发一次；成功后 v6 缓存建立，此路径不会再进。
+        if [ -z "$IPV6_ADDR" ]; then
+            echo "==> [WARP] ⚠️  ENABLE_WARP_IPV6=1 但配置与缓存均无 IPv6 地址（身份被旧版脚本清洗），尝试重新注册以恢复双栈..." >&2
+            WG_CONF_BAK="${WG_CONF}.lost-v6.bak"
+            cp "$WG_CONF" "$WG_CONF_BAK"
+            rm -f "$WG_CONF"
+            if register_warp && IPV6_ADDR=$(extract_ipv6_cidr "$(grep '^Address' "$WG_CONF")") && [ -n "$IPV6_ADDR" ]; then
+                echo "==> [WARP] ✅ 重注册成功，已恢复双栈身份 IPv6: $IPV6_ADDR" >&2
+                rm -f "$WG_CONF_BAK"
+                # 重注册是全新配置，v4 地址需从新配置重取
+                IPV4_ADDR=$(grep '^Address' "$WG_CONF" \
+                    | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' | head -n 1)
+                if [ -z "$IPV4_ADDR" ]; then
+                    echo "==> [WARP] ❌ 重注册后无法解析 IPv4 Address，回滚旧配置" >&2
+                    cp "$WG_CONF_BAK" "$WG_CONF" 2>/dev/null || true
+                    exit 1
+                fi
+                ADDRESS_VALUE="${IPV4_ADDR}"
+            else
+                echo "==> [WARP] ⚠️  重注册失败或新身份无 v6，回滚旧 IPv4-only 身份，降级纯 IPv4 继续" >&2
+                cp "$WG_CONF_BAK" "$WG_CONF"
+                rm -f "$WG_CONF_BAK"
+                IPV6_ADDR=""
+            fi
+        fi
+
         if [ -n "$IPV6_ADDR" ]; then
             ADDRESS_VALUE="${IPV4_ADDR},${IPV6_ADDR}"
             warp_log "双栈地址: IPv4=${IPV4_ADDR} IPv6=${IPV6_ADDR}"
         else
-            echo "==> [WARP] ⚠️  ENABLE_WARP_IPV6=1 但配置与缓存均无 IPv6 地址，仅启用 IPv4" >&2
+            echo "==> [WARP] ⚠️  双栈不可用，仅启用 IPv4" >&2
         fi
     fi
 

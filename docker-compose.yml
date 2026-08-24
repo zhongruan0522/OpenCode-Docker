@@ -24,7 +24,8 @@ services:
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-} # code-server 明文登录密码，entrypoint 会注入给 code-server
       - CODE_SERVER_HASHED_PASSWORD=${CODE_SERVER_HASHED_PASSWORD:-} # code-server 哈希密码（优先级高于明文），留空则不启用
       # GitHub
-      - GITHUB_TOKEN=${GITHUB_TOKEN} # GitHub CLI 登录 token，用于容器内 gh auth 和 git 操作
+      # gh CLI 不再走 GITHUB_TOKEN 环境变量登录：手动 `gh auth login` 一次，
+      # 凭据持久化在下方挂载的 ./.config/gh 卷里，容器重建后保持登录态
       - GITHUB_SSH_KEY=${GITHUB_SSH_KEY:-} # GitHub SSH 私钥（base64 编码），留空则不注入 id_rsa
       # Playwright
       - PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright # Playwright 浏览器缓存目录，使用 base 镜像预装的 Chromium
