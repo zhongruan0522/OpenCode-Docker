@@ -145,7 +145,6 @@ jobs:
             "serena|INPUT_SERENA_VERSION|serena-version|"
             "claude_code|INPUT_CLAUDE_CODE_VERSION|claude-code-version|"
             "codex_security|INPUT_CODEX_SECURITY_VERSION|codex-security-version|npm-v"
-            "openchamber|INPUT_OPENCHAMBER_VERSION|openchamber-version|"
           )
 
           # 任一组件未提供输入时，从 latest release body 提取全部锁定版本
@@ -179,6 +178,25 @@ jobs:
             echo "${name}_version=$ver" >> "$GITHUB_OUTPUT"
             if [ "$name" = "opencode" ]; then OC_VERSION="$ver"; fi
           done
+
+          # --- OpenChamber 版本 ---
+          # 与 Antigravity 同模式：首个版本构建时 release body 里还没有 openchamber-version
+          # 锁定标记（标记由本 workflow 首次成功后才写入），push/级联触发又没有入参，
+          # 若只依赖"入参→锁定值"会陷入鸡生蛋死锁。因此未提供入参时实时查上游
+          # GitHub releases 最新版：既作为缓存 key 传给 Dockerfile，也写入 release 标记。
+          OPENCHAMBER_VERSION="${INPUT_OPENCHAMBER_VERSION:-}"
+          if [ -z "$OPENCHAMBER_VERSION" ]; then
+            OPENCHAMBER_VERSION=$(printf '%s' "${BODY:-}" | grep -oP 'openchamber-version=\K[^\s]+' || true)
+          fi
+          if [ -z "$OPENCHAMBER_VERSION" ]; then
+            OPENCHAMBER_VERSION=$(curl -fsSL https://api.github.com/repos/openchamber/openchamber/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          fi
+          if [ -z "$OPENCHAMBER_VERSION" ] || [ "$OPENCHAMBER_VERSION" = "null" ]; then
+            echo "OpenChamber version was not resolved from input, saved release, or upstream releases" >&2
+            exit 1
+          fi
+          echo "openchamber: $OPENCHAMBER_VERSION"
+          echo "openchamber_version=$OPENCHAMBER_VERSION" >> "$GITHUB_OUTPUT"
 
           # --- Antigravity CLI 版本 ---
           # 上游清单永远只暴露最新版（无历史版本可锁），因此不设 workflow_dispatch 入参、
