@@ -105,8 +105,18 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.image }}:desktop
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # 与 Base/Dynamic 使用同一套 content-addressable registry storage；
+          # 共享 buildcache 标签可避免 workflow 级 GHA cache scope 重复上传下层大层。
+          cache-from: "${{
+            github.event_name != 'pull_request' &&
+            format('type=registry,ref={0}:buildcache-desktop', steps.meta.outputs.image) ||
+            'type=gha'
+            }}"
+          cache-to: "${{
+            github.event_name != 'pull_request' &&
+            format('type=registry,ref={0}:buildcache-desktop,mode=min', steps.meta.outputs.image) ||
+            'type=gha,mode=min'
+            }}"
 
   trigger-dynamic:
     if: github.event_name != 'pull_request' && needs.changes.outputs.skip != 'true'

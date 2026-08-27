@@ -255,6 +255,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract lowercased cache repository
+        id: cache_repo
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository }}"
+          echo "image=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v6
@@ -281,5 +287,15 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Dynamic 层同理使用共享 registry cache，避免再向独立的 GHA scope
+          # 复制 Base/Desktop 已上传过的多层链镜像内容。
+          cache-from: "${{
+            github.event_name != 'pull_request' &&
+            format('type=registry,ref={0}:buildcache-dynamic', steps.cache_repo.outputs.image) ||
+            'type=gha'
+            }}"
+          cache-to: "${{
+            github.event_name != 'pull_request' &&
+            format('type=registry,ref={0}:buildcache-dynamic,mode=min', steps.cache_repo.outputs.image) ||
+            'type=gha,mode=min'
+            }}"

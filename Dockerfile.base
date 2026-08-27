@@ -66,52 +66,26 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright \
     GOPATH=/home/app/go
 ENV PATH="/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/flutter/bin:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
 
-# 系统依赖（含 build-essential，构建完就扔）
-# Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
+# 编译期依赖（final stage 会另行安装完整的运行时系统包）
+# 这里不装 JDK 21/Wine/locale/fonts 等 runtime-only 组件：
+# 1. Android sdkmanager 只需 OpenJDK 17，JDK 21 是 final stage 的用户运行时要求。
+# 2. 多阶段最终只 COPY /usr/local、/opt、gh、Playwright 缓存和 Go modules，
+#    builder 安装的这些系统包不会进入最终镜像。
+# 3. Wine 仅在 final stage 需要；Windows Electron 缓存在构建期只是下载 + 解压，
+#    不需要执行 Wine。
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
-       | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" \
-       > /etc/apt/sources.list.d/adoptium.list \
-    && apt-get update \
     && apt-get install -y --no-install-recommends \
-        locales \
         ca-certificates \
         curl \
         gnupg \
-        jq \
         git \
         bash \
-        gosu \
-        supervisor \
-        openssh-client \
-        python3 \
         python3-pip \
         python3-venv \
         build-essential \
         openjdk-17-jdk-headless \
-        temurin-21-jdk \
-        vim \
-        wget \
         unzip \
         xz-utils \
-        nano \
-        tmux \
-        ripgrep \
-        sqlite3 \
-        libsqlite3-dev \
-        python-is-python3 \
-        poppler-utils \
-        fonts-noto-cjk \
-        bubblewrap \
-        wireguard-tools \
-        iptables \
-        iproute2 \
-        kmod \
-    && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
-    && locale-gen \
     && rm -rf /var/lib/apt/lists/*
 
 # Go + Bun + pnpm
@@ -209,17 +183,6 @@ RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
 # 办公四件套 Node.js 依赖（pptx/pdf skills）
 RUN npm install -g pptxgenjs prismjs mathjax-full skia-canvas pdf-lib pdfjs-dist
-
-# Wine（Linux 上交叉编译 Windows NSIS 安装包所需）
-RUN dpkg --add-architecture i386 \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        wine \
-        wine64 \
-        wine32 \
-        mono-complete \
-        nsis \
-    && rm -rf /var/lib/apt/lists/*
 
 # Windows Electron 二进制缓存（Linux 上交叉编译 Windows 桌面包所需）
 # electron-builder 打 Windows 包时需要 win32 平台的 electron.exe，
