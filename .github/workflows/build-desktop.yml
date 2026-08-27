@@ -129,8 +129,11 @@ jobs:
     steps:
       - name: Resolve pinned dynamic versions
         id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
+          set -euo pipefail
+          BODY=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.body // empty')
           OPENCODE_VERSION=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
           CODE_SERVER_VERSION=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
           CODEX_VERSION=$(echo "$BODY" | grep -oP 'codex-version=\K[^\s]+' || true)

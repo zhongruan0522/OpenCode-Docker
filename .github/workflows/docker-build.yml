@@ -123,6 +123,7 @@ jobs:
       - name: Resolve versions
         id: version
         env:
+          GH_TOKEN: ${{ github.token }}
           INPUT_OPENCODE_VERSION: ${{ inputs.opencode_version }}
           INPUT_CODE_SERVER_VERSION: ${{ inputs.code_server_version }}
           INPUT_CODEX_VERSION: ${{ inputs.codex_version }}
@@ -132,6 +133,21 @@ jobs:
           INPUT_OPENCHAMBER_VERSION: ${{ inputs.openchamber_version }}
         run: |
           set -euo pipefail
+
+          # workflow_dispatch 的缺失输入可能被表达式渲染为字符串 "null"。
+          # 这里统一归一化为空串，让后续“入参 → release 锁定值 → 上游实时值”正常回退。
+          for input_var in \
+            INPUT_OPENCODE_VERSION \
+            INPUT_CODE_SERVER_VERSION \
+            INPUT_CODEX_VERSION \
+            INPUT_SERENA_VERSION \
+            INPUT_CLAUDE_CODE_VERSION \
+            INPUT_CODEX_SECURITY_VERSION \
+            INPUT_OPENCHAMBER_VERSION; do
+            if [ "${!input_var:-}" = "null" ]; then
+              printf -v "$input_var" ''
+            fi
+          done
 
           # --- 版本解析统一框架 ---
           # 各组件的 tag 前缀剥离规则不同（GitHub tag 格式差异），统一收敛到一处声明：
@@ -151,10 +167,11 @@ jobs:
           NEED_SAVED=0
           for comp in "${COMPONENTS[@]}"; do
             IFS='|' read -r _ in_var _rest <<<"$comp"
-            if [ -z "${!in_var:-}" ]; then NEED_SAVED=1; break; fi
+            raw_input="${!in_var:-}"
+            if [ -z "$raw_input" ] || [ "$raw_input" = "null" ]; then NEED_SAVED=1; break; fi
           done
           if [ "$NEED_SAVED" -eq 1 ]; then
-            BODY=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
+            BODY=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.body // empty')
           fi
 
           OC_VERSION=""
@@ -162,6 +179,7 @@ jobs:
             IFS='|' read -r name in_var mark custom_prefix <<<"$comp"
 
             ver="${!in_var:-}"
+            if [ "$ver" = "null" ]; then ver=""; fi
             if [ -z "$ver" ]; then
               ver=$(printf '%s' "${BODY:-}" | grep -oP "${mark}=\K[^\s]+" || true)
               if [ -z "$ver" ]; then
@@ -185,11 +203,12 @@ jobs:
           # 若只依赖"入参→锁定值"会陷入鸡生蛋死锁。因此未提供入参时实时查上游
           # GitHub releases 最新版：既作为缓存 key 传给 Dockerfile，也写入 release 标记。
           OPENCHAMBER_VERSION="${INPUT_OPENCHAMBER_VERSION:-}"
+          if [ "$OPENCHAMBER_VERSION" = "null" ]; then OPENCHAMBER_VERSION=""; fi
           if [ -z "$OPENCHAMBER_VERSION" ]; then
             OPENCHAMBER_VERSION=$(printf '%s' "${BODY:-}" | grep -oP 'openchamber-version=\K[^\s]+' || true)
           fi
           if [ -z "$OPENCHAMBER_VERSION" ]; then
-            OPENCHAMBER_VERSION=$(curl -fsSL https://api.github.com/repos/openchamber/openchamber/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+            OPENCHAMBER_VERSION=$(gh api repos/openchamber/openchamber/releases/latest --jq '.tag_name' | sed 's/^v//')
           fi
           if [ -z "$OPENCHAMBER_VERSION" ] || [ "$OPENCHAMBER_VERSION" = "null" ]; then
             echo "OpenChamber version was not resolved from input, saved release, or upstream releases" >&2
@@ -212,40 +231,6 @@ jobs:
           echo "antigravity_version=$ANTIGRAVITY_VERSION" >> $GITHUB_OUTPUT
           # release tag：OpenCode 的 v 前缀 tag（供 check_release 与 release 创建复用）
           echo "opencode_tag=v${OC_VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Check if release already exists
-        id: check_release
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.opencode_tag }})
-          if [ "$STATUS" = "200" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release ${{ steps.version.outputs.opencode_tag }} already exists"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create or update GitHub Release
-        if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.version.outputs.opencode_tag }}
-          name: OpenCode ${{ steps.version.outputs.opencode_tag }}
-          body: |
-            Docker image for [OpenCode ${{ steps.version.outputs.opencode_tag }}](https://github.com/anomalyco/opencode/releases/tag/${{ steps.version.outputs.opencode_tag }})
-
-            <!-- 版本标记（供自动更新检查读取，请勿删除） -->
-            <!-- opencode-version=${{ steps.version.outputs.opencode_tag }} -->
-            <!-- code-server-version=${{ steps.version.outputs.code_server_version }} -->
-            <!-- codex-version=${{ steps.version.outputs.codex_version }} -->
-            <!-- serena-version=${{ steps.version.outputs.serena_version }} -->
-            <!-- claude-code-version=${{ steps.version.outputs.claude_code_version }} -->
-            <!-- codex-security-version=${{ steps.version.outputs.codex_security_version }} -->
-            <!-- antigravity-version=${{ steps.version.outputs.antigravity_version }} -->
-            <!-- openchamber-version=${{ steps.version.outputs.openchamber_version }} -->
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
@@ -299,3 +284,27 @@ jobs:
             format('type=registry,ref={0}:buildcache-dynamic,mode=min', steps.cache_repo.outputs.image) ||
             'type=gha,mode=min'
             }}"
+
+      - name: Create or update GitHub Release
+        # 镜像构建并推送成功后再写版本锁；否则构建失败也会让下次 Check Updates
+        # 把未成功打包的版本误判为“本地已构建”，直接破坏自动更新状态机。
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.opencode_tag }}
+          name: OpenCode ${{ steps.version.outputs.opencode_tag }}
+          body: |
+            Docker image for [OpenCode ${{ steps.version.outputs.opencode_tag }}](https://github.com/anomalyco/opencode/releases/tag/${{ steps.version.outputs.opencode_tag }})
+
+            <!-- 版本标记（供自动更新检查读取，请勿删除） -->
+            <!-- opencode-version=${{ steps.version.outputs.opencode_tag }} -->
+            <!-- code-server-version=${{ steps.version.outputs.code_server_version }} -->
+            <!-- codex-version=${{ steps.version.outputs.codex_version }} -->
+            <!-- serena-version=${{ steps.version.outputs.serena_version }} -->
+            <!-- claude-code-version=${{ steps.version.outputs.claude_code_version }} -->
+            <!-- codex-security-version=${{ steps.version.outputs.codex_security_version }} -->
+            <!-- antigravity-version=${{ steps.version.outputs.antigravity_version }} -->
+            <!-- openchamber-version=${{ steps.version.outputs.openchamber_version }} -->
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

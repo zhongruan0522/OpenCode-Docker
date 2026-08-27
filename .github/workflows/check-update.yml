@@ -14,6 +14,10 @@ jobs:
     permissions:
       actions: write
       contents: read
+    env:
+      # GitHub 匿名 API 按 runner 出口 IP 共享限额，公共 runner 上经常提前耗尽；
+      # 所有 GitHub 版本解析必须认证，且结果显式校验，禁止 null 往下游传播。
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       # ==========================================
@@ -22,7 +26,12 @@ jobs:
       - name: Get OpenCode latest release
         id: opencode
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
+          set -euo pipefail
+          LATEST=$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve OpenCode latest release tag" >&2
+            exit 1
+          fi
           echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "OpenCode latest: $LATEST"
 
@@ -31,14 +40,24 @@ jobs:
       - name: Get OpenChamber latest release
         id: openchamber
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/openchamber/openchamber/releases/latest | jq -r '.tag_name')
+          set -euo pipefail
+          LATEST=$(gh api repos/openchamber/openchamber/releases/latest --jq '.tag_name')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve OpenChamber latest release tag" >&2
+            exit 1
+          fi
           echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
           echo "OpenChamber latest: $LATEST"
 
       - name: Get code-server latest release
         id: codeserver
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name')
+          set -euo pipefail
+          LATEST=$(gh api repos/coder/code-server/releases/latest --jq '.tag_name')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve code-server latest release tag" >&2
+            exit 1
+          fi
           # code-server 的 tag 带 v 前缀，剥离后存纯版本号
           echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
           echo "code-server latest: $LATEST"
@@ -46,7 +65,12 @@ jobs:
       - name: Get Codex latest release
         id: codex
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/openai/codex/releases/latest | jq -r '.tag_name')
+          set -euo pipefail
+          LATEST=$(gh api repos/openai/codex/releases/latest --jq '.tag_name')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve Codex latest release tag" >&2
+            exit 1
+          fi
           # Codex 的 tag 格式为 rust-v{version}，剥离前缀
           echo "version=${LATEST#rust-v}" >> $GITHUB_OUTPUT
           echo "Codex latest: $LATEST"
@@ -54,14 +78,25 @@ jobs:
       - name: Get serena-agent latest version
         id: serena
         run: |
-          LATEST=$(curl -s https://pypi.org/pypi/serena-agent/json | jq -r '.info.version')
+          set -euo pipefail
+          LATEST=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \
+            https://pypi.org/pypi/serena-agent/json | jq -r '.info.version')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve serena-agent latest version from PyPI" >&2
+            exit 1
+          fi
           echo "version=${LATEST}" >> $GITHUB_OUTPUT
           echo "serena-agent latest: $LATEST"
 
       - name: Get Claude Code latest version
         id: claudecode
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/CometixSpace/claude-code/releases/latest | jq -r '.tag_name')
+          set -euo pipefail
+          LATEST=$(gh api repos/CometixSpace/claude-code/releases/latest --jq '.tag_name')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve Claude Code latest release tag" >&2
+            exit 1
+          fi
           # GitHub tag 带 v 前缀，剥离后存纯版本号
           echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
           echo "Claude Code latest: $LATEST"
@@ -69,7 +104,13 @@ jobs:
       - name: Get codex-security latest version
         id: codexsecurity
         run: |
-          LATEST=$(curl -s https://registry.npmjs.org/@openai/codex-security/latest | jq -r '.version')
+          set -euo pipefail
+          LATEST=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \
+            https://registry.npmjs.org/@openai/codex-security/latest | jq -r '.version')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve codex-security latest version from npm" >&2
+            exit 1
+          fi
           echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "codex-security latest: $LATEST"
 
@@ -78,6 +119,7 @@ jobs:
       - name: Get Antigravity CLI latest version
         id: antigravity
         run: |
+          set -euo pipefail
           LATEST=$(curl -fsSL --retry 10 --retry-all-errors --retry-delay 2 \
             https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json | jq -r '.version')
           if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
@@ -93,7 +135,8 @@ jobs:
       - name: Get our current versions
         id: local
         run: |
-          BODY=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.body // empty')
+          set -euo pipefail
+          BODY=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.body // empty')
           if [ -n "$BODY" ]; then
             LOCAL_OPENCODE=$(echo "$BODY" | grep -oP 'opencode-version=\K[^\s]+' || true)
             LOCAL_CODESERVER=$(echo "$BODY" | grep -oP 'code-server-version=\K[^\s]+' || true)
@@ -138,6 +181,10 @@ jobs:
           # 参数: app_name  local_version  upstream_version  changelog_url
           check_update() {
             local app="$1" local_v="$2" upstream_v="$3" changelog_url="$4"
+            if [ -z "$upstream_v" ] || [ "$upstream_v" = "null" ]; then
+              echo "$app upstream version is empty or null; refusing to notify or trigger a build" >&2
+              exit 1
+            fi
             if [ "$local_v" != "$upstream_v" ]; then
               HAS_UPDATE="true"
               echo "$app needs update: $local_v -> $upstream_v"
@@ -206,6 +253,8 @@ jobs:
 
           # 把待通知项写入文件（GITHUB_OUTPUT 不适合承载 JSON 数组）
           echo "$UPDATES" > /tmp/updates.json
+          # 这道边界校验专门防止限流/响应结构漂移再次把字符串 null 发进飞书卡片。
+          jq -e 'type == "array" and all(.[]; (.new_version | type == "string") and (.new_version != "") and (.new_version != "null"))' /tmp/updates.json >/dev/null
           echo "Updates to notify:"
           jq '.' /tmp/updates.json
 
