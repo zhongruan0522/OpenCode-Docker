@@ -25,6 +25,7 @@
 #   5. codex-security ← npm，高频（0.x 早期阶段，迭代极快）
 #   6. Antigravity    ← 官方清单最新版二进制直装，高频（1.x 早期阶段）
 #   7. opencode       ← npm，最高频（用户感知最强的小版本迭代）
+#   8. openchamber    ← pnpm，最高频（与 opencode 同频发布，且运行时托管 opencode 进程）
 #
 # 拆分 npm 层后，单个 npm 包升级只重建自己一层，不影响其他 npm 包缓存。
 
@@ -38,6 +39,7 @@ ARG SERENA_VERSION=latest
 ARG CLAUDE_CODE_VERSION=latest
 ARG CODEX_SECURITY_VERSION=latest
 ARG ANTIGRAVITY_VERSION=latest
+ARG OPENCHAMBER_VERSION=latest
 
 # === 1. code-server（apt deb，中低频）===
 RUN CODE_SERVER_ARCH="$(dpkg --print-architecture)" \
@@ -116,6 +118,25 @@ RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
     && rm -rf /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-baseline-musl \
               /usr/local/lib/node_modules/opencode-ai/node_modules/opencode-linux-x64-musl
+
+# === 8. openchamber（pnpm，最高频）===
+# OpenChamber Web UI（@openchamber/web），运行时托管 opencode serve，对外提供 4096 端口。
+# - 必须补装 python3-dev：node-pty 的 prebuild 二进制仅在 Node ABI 匹配时可用，
+#   ABI 失配回退 node-gyp 本地编译时需要 Python.h 才能成功。
+# - DEBIAN_FRONTEND=noninteractive 保证 apt 非交互安装不卡构建；CI=true 让 pnpm
+#   跳过全局目录变更时的交互确认（构建容器内无 TTY）。
+# - HOME=/home/app：pnpm 全局 bin 落在 /home/app/.local/share/pnpm/bin，
+#   与运行时 PATH（entrypoint 写入的 profile.d）保持一致；
+#   若以默认 root 家目录安装，服务降权后找不到 openchamber 可执行文件。
+# - symlink 到 /usr/local/bin：supervisord 不加载 profile.d 的 PATH，
+#   用绝对路径且 node 一定能找到的方式拉起服务。
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && env HOME=/home/app CI=true pnpm add -g "@openchamber/web@${OPENCHAMBER_VERSION}" \
+    && ln -sf /home/app/.local/share/pnpm/bin/openchamber /usr/local/bin/openchamber \
+    && chown -R app:app /home/app/.local/share/pnpm \
+    && openchamber --version
 
 # 动态层覆盖启动配置。
 COPY base/entrypoint.sh /usr/local/bin/entrypoint.sh

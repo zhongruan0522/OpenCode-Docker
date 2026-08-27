@@ -6,8 +6,9 @@ set -e
 
 STATUS=$(supervisorctl -c /etc/supervisor/supervisord.conf status)
 
-# 检查 opencode、code-server 是否都处于 RUNNING 状态
-echo "$STATUS" | grep -qE '^opencode\s+RUNNING' || { echo "opencode not RUNNING"; exit 1; }
+# 检查 openchamber、code-server 是否都处于 RUNNING 状态
+# （opencode serve 由 openchamber 托管拉起，不在 supervisord 直接管辖内）
+echo "$STATUS" | grep -qE '^openchamber\s+RUNNING' || { echo "openchamber not RUNNING"; exit 1; }
 echo "$STATUS" | grep -qE '^code-server\s+RUNNING' || { echo "code-server not RUNNING"; exit 1; }
 
 # 检查 sshd（仅在 authorized_keys 存在时）

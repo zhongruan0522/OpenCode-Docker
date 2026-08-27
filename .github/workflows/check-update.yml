@@ -26,6 +26,15 @@ jobs:
           echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "OpenCode latest: $LATEST"
 
+      # OpenChamber 的 GitHub tag 带 v 前缀（如 v1.21.0），剥离后存纯版本号。
+      # 与 Dockerfile pnpm 安装的 @openchamber/web 同源发布，取最新 release 即可。
+      - name: Get OpenChamber latest release
+        id: openchamber
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/openchamber/openchamber/releases/latest | jq -r '.tag_name')
+          echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
+          echo "OpenChamber latest: $LATEST"
+
       - name: Get code-server latest release
         id: codeserver
         run: |
@@ -93,6 +102,7 @@ jobs:
             LOCAL_CLAUDECODE=$(echo "$BODY" | grep -oP 'claude-code-version=\K[^\s]+' || true)
             LOCAL_CODEXSECURITY=$(echo "$BODY" | grep -oP 'codex-security-version=\K[^\s]+' || true)
             LOCAL_ANTIGRAVITY=$(echo "$BODY" | grep -oP 'antigravity-version=\K[^\s]+' || true)
+            LOCAL_OPENCHAMBER=$(echo "$BODY" | grep -oP 'openchamber-version=\K[^\s]+' || true)
           fi
           echo "opencode=${LOCAL_OPENCODE:-none}" >> $GITHUB_OUTPUT
           echo "codeserver=${LOCAL_CODESERVER:-none}" >> $GITHUB_OUTPUT
@@ -101,6 +111,7 @@ jobs:
           echo "claudecode=${LOCAL_CLAUDECODE:-none}" >> $GITHUB_OUTPUT
           echo "codexsecurity=${LOCAL_CODEXSECURITY:-none}" >> $GITHUB_OUTPUT
           echo "antigravity=${LOCAL_ANTIGRAVITY:-none}" >> $GITHUB_OUTPUT
+          echo "openchamber=${LOCAL_OPENCHAMBER:-none}" >> $GITHUB_OUTPUT
           echo "Our OpenCode: ${LOCAL_OPENCODE:-none}"
           echo "Our code-server: ${LOCAL_CODESERVER:-none}"
           echo "Our Codex: ${LOCAL_CODEX:-none}"
@@ -108,6 +119,7 @@ jobs:
           echo "Our Claude Code: ${LOCAL_CLAUDECODE:-none}"
           echo "Our codex-security: ${LOCAL_CODEXSECURITY:-none}"
           echo "Our Antigravity CLI: ${LOCAL_ANTIGRAVITY:-none}"
+          echo "Our OpenChamber: ${LOCAL_OPENCHAMBER:-none}"
 
       # ==========================================
       # 比对版本，任意一个有更新就触发构建
@@ -184,6 +196,12 @@ jobs:
             "${{ steps.antigravity.outputs.version }}" \
             "https://antigravity.google/cli"
 
+          # OpenChamber: 本地已剥 v 前缀，URL 里补回；pnpm 包与 GitHub release 同步发布
+          check_update "OpenChamber" \
+            "${{ steps.local.outputs.openchamber }}" \
+            "${{ steps.openchamber.outputs.version }}" \
+            "https://github.com/openchamber/openchamber/releases/tag/v${{ steps.openchamber.outputs.version }}"
+
           echo "has_update=$HAS_UPDATE" >> $GITHUB_OUTPUT
 
           # 把待通知项写入文件（GITHUB_OUTPUT 不适合承载 JSON 数组）
@@ -223,7 +241,8 @@ jobs:
                 codex_version: '${{ steps.codex.outputs.version }}',
                 serena_version: '${{ steps.serena.outputs.version }}',
                 claude_code_version: '${{ steps.claudecode.outputs.version }}',
-                codex_security_version: '${{ steps.codexsecurity.outputs.version }}'
+                codex_security_version: '${{ steps.codexsecurity.outputs.version }}',
+                openchamber_version: '${{ steps.openchamber.outputs.version }}'
               }
             });
 

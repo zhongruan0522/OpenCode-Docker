@@ -16,9 +16,9 @@ services:
       # 远程桌面 (RDP) 端口
       - "127.0.0.1:3390:3390"
     environment:
-      # OpenCode
-      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME} # OpenCode 服务登录用户名，entrypoint 会校验必填
-      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD} # OpenCode 服务登录密码
+      # OpenChamber（主服务入口，托管 opencode serve，端口 4096）
+      - OPENCHAMBER_UI_PASSWORD=${OPENCHAMBER_UI_PASSWORD:-} # OpenChamber 浏览器 UI 登录密码，留空则无密码保护（对外暴露时务必设置）
+      - OPENCHAMBER_HOST=${OPENCHAMBER_HOST:-0.0.0.0} # OpenChamber 监听地址，默认 0.0.0.0 以支持容器端口映射
       - OPENCODE_ENABLE_EXA=${OPENCODE_ENABLE_EXA:-true} # 是否启用 OpenCode 的 Exa 搜索能力
       # Code-Server
       - CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-} # code-server 明文登录密码，entrypoint 会注入给 code-server

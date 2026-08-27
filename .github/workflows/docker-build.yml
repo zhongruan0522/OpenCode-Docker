@@ -45,6 +45,11 @@ on:
         required: false
         default: ''
         type: string
+      openchamber_version:
+        description: 'OpenChamber version (e.g. 1.21.0 or v1.21.0). Leave empty to reuse saved release version.'
+        required: false
+        default: ''
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -124,6 +129,7 @@ jobs:
           INPUT_SERENA_VERSION: ${{ inputs.serena_version }}
           INPUT_CLAUDE_CODE_VERSION: ${{ inputs.claude_code_version }}
           INPUT_CODEX_SECURITY_VERSION: ${{ inputs.codex_security_version }}
+          INPUT_OPENCHAMBER_VERSION: ${{ inputs.openchamber_version }}
         run: |
           set -euo pipefail
 
@@ -139,6 +145,7 @@ jobs:
             "serena|INPUT_SERENA_VERSION|serena-version|"
             "claude_code|INPUT_CLAUDE_CODE_VERSION|claude-code-version|"
             "codex_security|INPUT_CODEX_SECURITY_VERSION|codex-security-version|npm-v"
+            "openchamber|INPUT_OPENCHAMBER_VERSION|openchamber-version|"
           )
 
           # 任一组件未提供输入时，从 latest release body 提取全部锁定版本
@@ -217,6 +224,7 @@ jobs:
             <!-- claude-code-version=${{ steps.version.outputs.claude_code_version }} -->
             <!-- codex-security-version=${{ steps.version.outputs.codex_security_version }} -->
             <!-- antigravity-version=${{ steps.version.outputs.antigravity_version }} -->
+            <!-- openchamber-version=${{ steps.version.outputs.openchamber_version }} -->
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -250,6 +258,7 @@ jobs:
             CLAUDE_CODE_VERSION=${{ steps.version.outputs.claude_code_version }}
             CODEX_SECURITY_VERSION=${{ steps.version.outputs.codex_security_version }}
             ANTIGRAVITY_VERSION=${{ steps.version.outputs.antigravity_version }}
+            OPENCHAMBER_VERSION=${{ steps.version.outputs.openchamber_version }}
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
