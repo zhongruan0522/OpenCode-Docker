@@ -128,12 +128,17 @@ RUN npm install -g opencode-ai@${OPENCODE_VERSION} \
 # - HOME=/home/app：pnpm 全局 bin 落在 /home/app/.local/share/pnpm/bin，
 #   与运行时 PATH（entrypoint 写入的 profile.d）保持一致；
 #   若以默认 root 家目录安装，服务降权后找不到 openchamber 可执行文件。
+# - PATH 必须显式包含 PNPM_HOME/bin：Base 层 ENV 的 PATH 只带 PNPM_HOME 本身，
+#   而 pnpm 要求"配置的全局 bin 目录必须在 PATH 中"，缺失会直接拒绝全局安装
+#   （[ERROR] ... is not in PATH → Run "pnpm setup"）。这是 CI 首次构建失败根因。
 # - symlink 到 /usr/local/bin：supervisord 不加载 profile.d 的 PATH，
 #   用绝对路径且 node 一定能找到的方式拉起服务。
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && env HOME=/home/app CI=true pnpm add -g "@openchamber/web@${OPENCHAMBER_VERSION}" \
+    && env HOME=/home/app PNPM_HOME=/home/app/.local/share/pnpm CI=true \
+       PATH="/home/app/.local/share/pnpm/bin:/home/app/.local/share/pnpm:${PATH}" \
+       pnpm add -g "@openchamber/web@${OPENCHAMBER_VERSION}" \
     && ln -sf /home/app/.local/share/pnpm/bin/openchamber /usr/local/bin/openchamber \
     && chown -R app:app /home/app/.local/share/pnpm \
     && openchamber --version

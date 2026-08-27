@@ -6,6 +6,9 @@ set -e
 # ==========================================
 # 监听地址：容器场景必须 0.0.0.0 才能被端口映射访问到，默认即 0.0.0.0。
 export OPENCHAMBER_HOST="${OPENCHAMBER_HOST:-0.0.0.0}"
+# 必须无条件导出（可为空串）：supervisord.conf 里以 %(ENV_OPENCHAMBER_UI_PASSWORD)s
+# 插值注入子进程环境，变量未定义时 supervisord 启动会直接解析报错。
+export OPENCHAMBER_UI_PASSWORD="${OPENCHAMBER_UI_PASSWORD:-}"
 # UI 登录密码：未设置时 OpenChamber 无密码保护浏览器访问，
 # 服务绑定 0.0.0.0 对外暴露前应务必设置该变量。
 if [ -n "${OPENCHAMBER_UI_PASSWORD:-}" ]; then
