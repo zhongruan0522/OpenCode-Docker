@@ -7,42 +7,6 @@
 # ==========================================
 
 # ---
-# 阶段 1.5：编译 MicroSOCKS 引擎
-# ---
-FROM alpine:3.21 AS microsocks-builder
-
-RUN apk add --no-cache build-base git
-# 浅克隆 + ref 锁定，保证构建可复现（吸收自上游 MicroWARP 8a3f592）
-ARG MICROSOCKS_REF=master
-RUN git clone --depth 1 --branch "${MICROSOCKS_REF}" \
-        https://github.com/rofl0r/microsocks.git /src \
-    && cd /src && make CFLAGS="-static -O2" LDFLAGS="-static"
-
-# ---
-# 阶段 1.6：下载 usque（MASQUE / CONNECT-IP 客户端，官方预编译 release）
-# 供 init-warp.sh 的 TUNNEL_PROTOCOL=masque 路径使用（吸收自上游 MicroWARP 8045ba9）
-# ---
-FROM alpine:3.21 AS usque-downloader
-
-RUN apk add --no-cache curl ca-certificates unzip
-
-# 锁定已知可用版本，必要时构建期覆盖
-ARG USQUE_VERSION=4.2.1
-
-RUN set -eu; \
-    case "$(uname -m)" in \
-        x86_64)  arch=amd64 ;; \
-        aarch64) arch=arm64 ;; \
-        *) echo "unsupported arch=$(uname -m)" >&2; exit 1 ;; \
-    esac; \
-    url="https://github.com/Diniboy1123/usque/releases/download/v${USQUE_VERSION}/usque_${USQUE_VERSION}_linux_${arch}.zip"; \
-    curl -fsSL -o /tmp/usque.zip "${url}"; \
-    unzip -q /tmp/usque.zip -d /tmp/usque-extract; \
-    bin="$(find /tmp/usque-extract -type f -name 'usque' | head -n 1)"; \
-    test -n "${bin}" && test -s "${bin}"; \
-    install -m 755 "${bin}" /usr/local/bin/usque
-
-# ---
 # 阶段 2：构建环境（完整工具链，产出所有制品）
 # ---
 FROM node:24.10.0-bookworm-slim AS builder
@@ -151,11 +115,6 @@ RUN curl -fsSL "https://services.gradle.org/distributions/gradle-7.5-bin.zip" -o
     && unzip -q /tmp/gradle-9.0.zip -d /opt \
     && ln -sf /opt/gradle-9.0.0/bin/gradle /usr/local/bin/gradle \
     && rm -f /tmp/gradle-7.5.zip /tmp/gradle-9.0.zip
-
-# microsocks
-COPY --from=microsocks-builder /src/microsocks /usr/local/bin/microsocks
-# usque（MASQUE 客户端，TUNNEL_PROTOCOL=masque 时使用）
-COPY --from=usque-downloader /usr/local/bin/usque /usr/local/bin/usque
 
 # gh CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -433,7 +392,6 @@ RUN dpkg --add-architecture i386 \
         poppler-utils \
         fonts-noto-cjk \
         bubblewrap \
-        wireguard-tools \
         iptables \
         iproute2 \
         kmod \
@@ -564,7 +522,6 @@ ENV PNPM_HOME="/home/app/.local/share/pnpm" \
     PLAYWRIGHT_MCP_HEADLESS=1 \
     PLAYWRIGHT_MCP_BROWSER=chrome \
     PLAYWRIGHT_MCP_SANDBOX=0 \
-    WARP_SOCKS_PORT=1080 \
     ELECTRON_CACHE=/opt/electron-cache \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
@@ -579,7 +536,7 @@ ENV PNPM_HOME="/home/app/.local/share/pnpm" \
 # desktop 用户及其家目录由桌面层（Dockerfile.desktop）的 useradd --create-home 创建。
 RUN if ! id -u app >/dev/null 2>&1; then useradd --create-home --shell /bin/bash --uid 10001 app; fi \
     && mkdir -p /workspace /home/app/.config/opencode /home/app/.config/code-server \
-               /home/app/.cache /home/app/.local/share/code-server /etc/wireguard \
+               /home/app/.cache /home/app/.local/share/code-server \
                "${PNPM_HOME}" /home/app/go \
     && chown -R app:app /home/app /workspace \
     && chmod g+rwx /workspace && chmod g+s /workspace
@@ -601,11 +558,10 @@ RUN bash /tmp/preload-go-modules.sh \
 COPY base/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY base/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY base/supervisord.conf /etc/supervisor/supervisord.conf
-COPY base/init-warp.sh /usr/local/bin/init-warp.sh
 # init-desktop.sh / xrdp-startwm.sh 归桌面层（Dockerfile.desktop），此处不再 COPY。
 # 桌面环境配置/资源（desktop/**）同样归桌面层。
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-warp.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
 
 WORKDIR /workspace
 
