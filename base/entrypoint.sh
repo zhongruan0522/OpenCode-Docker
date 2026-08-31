@@ -33,17 +33,11 @@ else
 fi
 
 # ==========================================
-# mihomo (Clash) 代理初始化（可选，通过 ENABLE_CLASH=1 开启）
+# mihomo (Clash) TUN 模式初始化（可选，通过 ENABLE_CLASH=1 开启）
 # ==========================================
 if [ "${ENABLE_CLASH:-0}" = "1" ]; then
     if /usr/local/bin/init-clash.sh; then
-        CLASH_MIXED_PORT="${CLASH_MIXED_PORT:-7890}"
-        export SOCKS5_PROXY="socks5://127.0.0.1:${CLASH_MIXED_PORT}"
-        export HTTP_PROXY="http://127.0.0.1:${CLASH_MIXED_PORT}"
-        export HTTPS_PROXY="http://127.0.0.1:${CLASH_MIXED_PORT}"
-        export ALL_PROXY="socks5://127.0.0.1:${CLASH_MIXED_PORT}"
-        export NO_PROXY="localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-        echo "==> [Clash] 代理环境变量已注入: SOCKS5_PROXY / HTTP_PROXY / HTTPS_PROXY / ALL_PROXY → 127.0.0.1:${CLASH_MIXED_PORT}"
+        echo "==> [Clash] TUN 模式已接管所有出站流量，无需代理环境变量"
     else
         echo "==> [Clash] WARNING: mihomo 初始化失败，跳过代理注入并继续启动主服务" >&2
     fi
