@@ -40,6 +40,10 @@ services:
       - ALLOW_APP_DESKTOP=${ALLOW_APP_DESKTOP:-1} # 是否允许 app 用户桌面登录，1=允许（默认，向后兼容），0=禁用（仅 desktop 可登录）
       # DinD
       - ENABLE_DOCKERD=${ENABLE_DOCKERD:-0} # 是否开机自启 DinD dockerd，默认关闭以节省内存。运行中可 supervisorctl start dockerd 手动拉起
+      # mihomo (Clash) 代理
+      - ENABLE_CLASH=${ENABLE_CLASH:-0} # 是否启用 mihomo (Clash) 代理；1=启用，启动时会读取 CLASH_CONFIG_PATH 指向的配置文件
+      - CLASH_CONFIG_PATH=${CLASH_CONFIG_PATH:-} # Clash/mihomo 订阅配置文件在容器内的路径（需通过 volumes 挂载进来）
+      - CLASH_MIXED_PORT=${CLASH_MIXED_PORT:-7890} # mihomo 混合代理端口（HTTP+SOCKS5），启动时覆写到配置文件
     ulimits:
       core:
         soft: 0
@@ -52,6 +56,12 @@ services:
     volumes:
       # === 工作区 ===
       - ./workspace:/workspace:rshared
+
+      # === mihomo (Clash) 配置 ===
+      # 将宿主机的 Clash/mihomo 配置文件挂载到容器内，
+      # CLASH_CONFIG_PATH 设置为此路径即可（如 /etc/clash-user/config.yaml）。
+      # 用法：把你的 Clash Verge 导出的 YAML 放到 ./app-config/clash/config.yaml
+      # - ./app-config/clash:/etc/clash-user:rshared
       
       # 主服务
       # === Git 配置 ===
