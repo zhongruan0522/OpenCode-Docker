@@ -27,6 +27,9 @@ jobs:
     permissions:
       actions: write
       packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build-base.outputs.digest }}
 
     steps:
       - name: Checkout repository
@@ -34,21 +37,25 @@ jobs:
 
       - name: Free runner disk space
         run: |
+          AVAIL_GB=$(df -BG --output=avail / | awk 'NR == 2 { gsub(/G/, ""); print }')
+          echo "Available disk space: ${AVAIL_GB}GB"
+          if [ "${AVAIL_GB}" -lt 40 ]; then
+            sudo rm -rf \
+              /usr/share/dotnet \
+              /usr/local/lib/android \
+              /opt/ghc \
+              /usr/local/share/boost \
+              /opt/hostedtoolcache/CodeQL
+            docker system prune -af --volumes
+          else
+            echo "Disk space is sufficient; skipping cleanup."
+          fi
           df -h
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /usr/local/share/boost \
-            /opt/hostedtoolcache/CodeQL
-          docker system prune -af --volumes
-          df -h
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+        with:
+          cleanup: false
 
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
@@ -65,6 +72,7 @@ jobs:
           echo "image=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Build and push base image
+        id: build-base
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -111,9 +119,18 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
+            const baseImage = process.env.BASE_IMAGE;
+            if (!baseImage.includes('@sha256:')) {
+              throw new Error(`Base image digest was not produced: ${baseImage}`);
+            }
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'build-desktop.yml',
-              ref: 'main'
+              ref: 'main',
+              inputs: {
+                base_image: baseImage
+              }
             });
+        env:
+          BASE_IMAGE: ${{ needs.build-base.outputs.image }}@${{ needs.build-base.outputs.digest }}

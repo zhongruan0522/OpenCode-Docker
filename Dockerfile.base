@@ -565,14 +565,15 @@ COPY --from=builder /usr/bin/gh /usr/bin/gh
 COPY --from=builder --chown=app:app /home/app/.cache/ms-playwright /home/app/.cache/ms-playwright
 COPY --from=builder --chown=app:app /home/app/go/pkg/mod /home/app/go/pkg/mod
 
-# mihomo（Clash 内核）
-COPY --from=mihomo-downloader /usr/local/bin/mihomo /usr/local/bin/mihomo
-
 # 预热 Go 模块缓存，避免容器启动后反复下载大体量依赖。
 COPY base/go/preload-go-modules.sh /tmp/preload-go-modules.sh
 RUN bash /tmp/preload-go-modules.sh \
     && chown -R app:app /home/app/go \
     && rm -f /tmp/preload-go-modules.sh
+
+# mihomo（Clash 内核）
+# 放在 Go 模块预热之后：mihomo-only 升级不会让耗时较长的 Go 预热层失效。
+COPY --from=mihomo-downloader /usr/local/bin/mihomo /usr/local/bin/mihomo
 
 # === 容器启动 / 进程管理脚本（base/，仅 Base 归属部分） ===
 COPY base/entrypoint.sh /usr/local/bin/entrypoint.sh

@@ -8,7 +8,7 @@
 # CI 推送到 ghcr.io/zhongruan0522/opencode-docker:desktop
 #
 # 层排序策略与动态层一致：更新频率从低到高排列。
-# 桌面包 apt（低频，最重）→ Sarasa 字体（低频，1.9GB 大头）
+# 桌面包 apt（低频，最重）→ Sarasa UI/Mono 字体（低频，本层最大资源）
 # → WhiteSur GTK 主题 / 图标 / 壁纸（低频）→ desktop 用户（极少变）→ 桌面配置文件（相对高频）
 # ==========================================
 
@@ -84,26 +84,33 @@ RUN sed -i \
     && echo "==> xrdp 登录界面配色已对齐 macOS"
 
 # ---
-# 3. Sarasa Gothic 更纱字体（低频，体积大头 1.9GB）
+# 3. Sarasa UI/Mono 更纱字体（低频，桌面默认配置实际使用的两个家族）
 # ---
-# 中英文等宽对齐的现代中文字体（1cjk=2ascii），终端/编辑器友好。
+# 中英文等宽对齐的现代中文字体，终端/编辑器友好。
 # Debian bookworm 仓库版本较旧且只有部分子集，直接从 GitHub releases 取固定版本。
-# 覆盖 Sarasa UI/Mono/Fixed/Term/Gothic/Slab 全族 SC（简体）子集。
+# 桌面默认仅使用 XFCE/GTK 的 UI SC 和等宽 Mono SC；为控制镜像体积，
+# 不再下载完整 Sarasa-TTF 包并保留其他 Fixed/Term/Gothic/Slab 可选家族。
 RUN SARASA_ARCH="$(dpkg --print-architecture)" \
     && case "${SARASA_ARCH}" in amd64|arm64) ;; *) echo "Unsupported sarasa arch: ${SARASA_ARCH}" >&2; exit 1 ;; esac \
     && mkdir -p /usr/share/fonts/truetype/sarasa /tmp/sarasa \
-    && curl -fsSL "https://github.com/be5invis/Sarasa-Gothic/releases/download/v${SARASA_VERSION}/Sarasa-TTF-${SARASA_VERSION}.7z" -o /tmp/sarasa/sarasa.7z \
-    && 7z x -y /tmp/sarasa/sarasa.7z -o/tmp/sarasa >/dev/null \
-    # 只保留 SC（简体）子集，避免装全 11 个 cjk 变体撑爆层（200MB+）
-    && mv /tmp/sarasa/Sarasa*SC*.ttf /usr/share/fonts/truetype/sarasa/ \
-    # 校验：若没装上任何字体，立刻失败而非静默通过
-    && if [ -z "$(ls /usr/share/fonts/truetype/sarasa/*.ttf 2>/dev/null)" ]; then \
-         echo "FATAL: no Sarasa SC ttf installed; release asset layout may have changed" >&2; \
+    && curl -fL --retry 5 --retry-all-errors --parallel --parallel-immediate \
+        -o /tmp/sarasa/SarasaUiSC.7z \
+            "https://github.com/be5invis/Sarasa-Gothic/releases/download/v${SARASA_VERSION}/SarasaUiSC-TTF-${SARASA_VERSION}.7z" \
+        -o /tmp/sarasa/SarasaMonoSC.7z \
+            "https://github.com/be5invis/Sarasa-Gothic/releases/download/v${SARASA_VERSION}/SarasaMonoSC-TTF-${SARASA_VERSION}.7z" \
+    && 7z x -y /tmp/sarasa/SarasaUiSC.7z -o/tmp/sarasa >/dev/null \
+    && 7z x -y /tmp/sarasa/SarasaMonoSC.7z -o/tmp/sarasa >/dev/null \
+    && mv /tmp/sarasa/Sarasa*.ttf /usr/share/fonts/truetype/sarasa/ \
+    # 校验两个默认家族都存在，避免上游 asset 改名时得到残缺字体层
+    && for family in SarasaUiSC SarasaMonoSC; do \
+         if [ -z "$(find /usr/share/fonts/truetype/sarasa -maxdepth 1 -type f -name "${family}-*.ttf" -print -quit)" ]; then \
+           echo "FATAL: missing ${family}; release asset layout may have changed" >&2; \
          exit 1; \
-       fi \
+       fi; \
+     done \
     && rm -rf /tmp/sarasa \
     && fc-cache -f /usr/share/fonts/truetype/sarasa \
-    && echo "==> Sarasa 字体已安装: $(ls /usr/share/fonts/truetype/sarasa/ | wc -l) files"
+    && echo "==> Sarasa UI/Mono SC 字体已安装: $(find /usr/share/fonts/truetype/sarasa -maxdepth 1 -type f -name '*.ttf' | wc -l) files"
 
 # ---
 # 4. WhiteSur GTK 主题（低频）
