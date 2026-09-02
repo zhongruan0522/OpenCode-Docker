@@ -66,15 +66,15 @@ done
 
 find_cli_path() {
     local locations=(
-        "$HOME/.claude/local/node_modules/@cometix/claude-code/cli.js"
-        "/usr/local/lib/node_modules/@cometix/claude-code/cli.js"
-        "/usr/lib/node_modules/@cometix/claude-code/cli.js"
+        "$HOME/.claude/local/node_modules/@anthropic-ai/claude-code/cli.js"
+        "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js"
+        "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js"
     )
     if command -v npm &> /dev/null; then
         local npm_root
         npm_root=$(npm root -g 2>/dev/null || true)
         if [[ -n "$npm_root" ]]; then
-            locations+=("$npm_root/@cometix/claude-code/cli.js")
+            locations+=("$npm_root/@anthropic-ai/claude-code/cli.js")
         fi
     fi
     for path in "${locations[@]}"; do

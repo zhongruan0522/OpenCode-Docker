@@ -20,6 +20,17 @@ if [[ ! -d "${CCPATCH_DIR}" ]]; then
     exit 0
 fi
 
+# @anthropic-ai/claude-code 当前通过 npm wrapper 分发原生二进制，包内不再有
+# 供本目录脚本修改的 cli.js。明确跳过，避免把每个补丁的预期失败伪装成已应用。
+if command -v npm >/dev/null 2>&1; then
+    npm_root=$(npm root -g 2>/dev/null || true)
+    claude_package_dir="${npm_root}/@anthropic-ai/claude-code"
+    if [[ -f "${claude_package_dir}/bin/claude.exe" && ! -f "${claude_package_dir}/cli.js" ]]; then
+        echo "[ccpatch] 官方 Claude Code npm 包使用原生二进制，未提供 cli.js；跳过 JavaScript 补丁。"
+        exit 0
+    fi
+fi
+
 shopt -s nullglob
 scripts=( "${CCPATCH_DIR}"/*.sh )
 shopt -u nullglob

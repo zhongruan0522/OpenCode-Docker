@@ -92,13 +92,13 @@ jobs:
         id: claudecode
         run: |
           set -euo pipefail
-          LATEST=$(gh api repos/CometixSpace/claude-code/releases/latest --jq '.tag_name')
+          LATEST=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \
+            https://registry.npmjs.org/@anthropic-ai/claude-code/latest | jq -r '.version')
           if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
-            echo "Failed to resolve Claude Code latest release tag" >&2
+            echo "Failed to resolve Claude Code latest version from npm" >&2
             exit 1
           fi
-          # GitHub tag 带 v 前缀，剥离后存纯版本号
-          echo "version=${LATEST#v}" >> $GITHUB_OUTPUT
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "Claude Code latest: $LATEST"
 
       - name: Get codex-security latest version
@@ -225,11 +225,11 @@ jobs:
             "${{ steps.serena.outputs.version }}" \
             "https://pypi.org/project/serena-agent/${{ steps.serena.outputs.version }}/"
 
-          # Claude Code: 社区 fork（CometixSpace/claude-code），GitHub tag 带 v 前缀，URL 里补回
+          # Claude Code: 官方 npm 包，Changelog 指向 npm 对应版本页
           check_update "Claude Code" \
             "${{ steps.local.outputs.claudecode }}" \
             "${{ steps.claudecode.outputs.version }}" \
-            "https://github.com/CometixSpace/claude-code/releases/tag/v${{ steps.claudecode.outputs.version }}"
+            "https://www.npmjs.com/package/@anthropic-ai/claude-code/v/${{ steps.claudecode.outputs.version }}"
 
           # codex-security: 仅 npm 分发，GitHub tag 格式为 npm-v{version}
           check_update "codex-security" \

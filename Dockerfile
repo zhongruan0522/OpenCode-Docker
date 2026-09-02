@@ -63,17 +63,18 @@ RUN if ! command -v uv >/dev/null 2>&1; then \
 RUN npm install -g @openai/codex@${CODEX_VERSION}
 
 # === 4. Claude Code（npm，中高频）===
-# 动态层不再安装原版 @anthropic-ai/claude-code，改用社区 fork @cometix/claude-code。
-# 版本由 CLAUDE_CODE_VERSION 驱动（check-update.yml 检测 CometixSpace/claude-code 的 GitHub releases）。
+# 安装官方 npm 包 @anthropic-ai/claude-code。
+# 版本由 CLAUDE_CODE_VERSION 驱动（check-update.yml 检测 npm registry）。
 # @cometix/ccline 是配套工具，随 CC 一起重建，不单独接入自动更新。
-RUN npm install -g @cometix/claude-code@${CLAUDE_CODE_VERSION} \
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && npm install -g @cometix/ccline
 
 # === 4.5 Claude Code 补丁（agent/ccpatch/，中低频）===
 # 装完 Claude Code 后自动执行 agent/ccpatch/ 下全部 *.sh 补丁脚本。
+# - 官方 npm 包现为原生二进制分发、未提供 cli.js 时，runner 会明确说明并跳过 JS 补丁。
 # - 兼容性：runner 用 glob 遍历，未来新增 .sh 无需改 Dockerfile 自动生效。
 # - 容错：任一脚本失败仅告警不中断（runner 内部容错 + 外层 || true 双保险），构建不受影响。
-# - 层排序：紧跟 CC 层之后——CC 升级 → 父层 digest 变化 → 此层对最新 cli.js 自动重跑补丁。
+# - 层排序：紧跟 CC 层之后——采用 cli.js 的 CC 升级时，父层 digest 变化会令此层自动重跑补丁。
 COPY agent/run-ccpatch.sh /usr/local/bin/run-ccpatch.sh
 COPY agent/ccpatch/ /opt/ccpatch/
 RUN chmod +x /usr/local/bin/run-ccpatch.sh \

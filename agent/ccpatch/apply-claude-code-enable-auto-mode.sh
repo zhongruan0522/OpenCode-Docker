@@ -126,15 +126,15 @@ done
 # ============================================================
 find_cli_path() {
     local locations=(
-        "$HOME/.claude/local/node_modules/@cometix/claude-code/cli.js"
-        "/usr/local/lib/node_modules/@cometix/claude-code/cli.js"
-        "/usr/lib/node_modules/@cometix/claude-code/cli.js"
+        "$HOME/.claude/local/node_modules/@anthropic-ai/claude-code/cli.js"
+        "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js"
+        "/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js"
     )
     if command -v npm &> /dev/null; then
         local npm_root
         npm_root=$(npm root -g 2>/dev/null || true)
         if [[ -n "$npm_root" ]]; then
-            locations+=("$npm_root/@cometix/claude-code/cli.js")
+            locations+=("$npm_root/@anthropic-ai/claude-code/cli.js")
         fi
     fi
     for path in "${locations[@]}"; do
@@ -159,9 +159,9 @@ else
         error "Claude Code cli.js not found"
         echo ""
         echo "Searched locations:"
-        echo "  ~/.claude/local/node_modules/@cometix/claude-code/cli.js"
-        echo "  /usr/local/lib/node_modules/@cometix/claude-code/cli.js"
-        echo "  \$(npm root -g)/@cometix/claude-code/cli.js"
+        echo "  ~/.claude/local/node_modules/@anthropic-ai/claude-code/cli.js"
+        echo "  /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js"
+        echo "  \$(npm root -g)/@anthropic-ai/claude-code/cli.js"
         echo ""
         echo "Tip: You can specify the path directly:"
         echo "  $0 /path/to/cli.js"
@@ -323,7 +323,7 @@ let oQqFunc = null;
 
 if (oQqCandidates.length === 0) {
     // Check if already patched: 1-param FuncDecl with body = {return !0}
-    // This happens when @cometix/claude-code or a prior run already patched it
+    // This happens when Claude Code or a prior run already patched it
     const alreadyPatched = allFuncDecls.filter(fn => {
         const s = code.slice(fn.body.start, fn.body.end).replace(/\s+/g, '');
         return s === '{return!0}';
