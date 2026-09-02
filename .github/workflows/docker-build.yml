@@ -87,7 +87,7 @@ jobs:
           echo "$CHANGED"
           # Base 层 + 桌面层归属路径（上层镜像 FROM 它们，同 push 变动即存在竞态）
           LOWER_RE='^(Dockerfile\.base|base/|Dockerfile\.desktop|desktop/)'
-          if grep -qE "$LOWER_RE"; then
+          if printf '%s\n' "$CHANGED" | grep -qE "$LOWER_RE"; then
             echo "Lower-layer files changed in same push; skip direct trigger, cascade will rebuild."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
