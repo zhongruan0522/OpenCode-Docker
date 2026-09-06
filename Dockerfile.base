@@ -17,7 +17,7 @@ ARG WRANGLER_VERSION=latest
 ARG EAS_CLI_VERSION=latest
 ARG ELECTRON_VERSION=41.7.1
 ARG BUN_VERSION=1.3.14
-ARG PNPM_VERSION=10.33.2
+ARG PNPM_VERSION=latest
 ARG JS_REVERSE_MCP_VERSION=2.1.6
 ARG ANYTHING_ANALYZER_VERSION=3.6.50
 ARG RADARE2_VERSION=6.1.6
@@ -138,7 +138,10 @@ RUN npm install -g typescript eslint prettier esbuild tsx turbo oxlint vitest @v
 # yarn（UnifyNook web 声明 packageManager: yarn@1.22.22）
 # Node.js 24 镜像已内置 corepack 和 yarn shim，npm install -g 会 EEXIST 冲突。
 # 用 corepack prepare 固定 yarn 1.22.22 版本即可。
-RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+# 注意：corepack 只接管 yarn。pnpm 保留上面 npm 安装的真实入口——
+# corepack 会按 registry latest 动态解析版本，且其 shim 硬编码 bin/pnpm.cjs，
+# pnpm 12+ 已移除该文件（2026-09-06 两次动态层构建失败的根因）。
+RUN corepack enable yarn && corepack prepare yarn@1.22.22 --activate
 
 # 办公四件套 Node.js 依赖（pptx/pdf skills）
 RUN npm install -g pptxgenjs prismjs mathjax-full skia-canvas pdf-lib pdfjs-dist
