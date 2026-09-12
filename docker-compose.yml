@@ -1,6 +1,10 @@
 services:
   opencode:
-    image: ghcr.io/zhongruan0522/opencode-docker:${OPENCODE_SERVER_VERSION:-1.14.19}
+    # 镜像双变体（同一版本号两种 tag，按需选用）：
+    #   - vX.Y.Z-desktop（默认）：带 XFCE4/xrdp 远程桌面的完整版（Desktop-Base）
+    #   - vX.Y.Z（无后缀，如 1.14.19）：slim 版（NoDesktop-Base），不含远程桌面，
+    #     下方 3390 端口映射与 ENABLE_DESKTOP/DESKTOP_PASSWORD 等桌面配置自动失效/跳过
+    image: ghcr.io/zhongruan0522/opencode-docker:${OPENCODE_SERVER_VERSION:-1.14.19-desktop}
     container_name: opencode
     ports:
       # Codex登录端口

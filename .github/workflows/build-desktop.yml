@@ -72,6 +72,9 @@ jobs:
     outputs:
       image: ${{ steps.meta.outputs.image }}
       digest: ${{ steps.build-desktop.outputs.digest }}
+      # 本 job 实际使用的 Base 引用：级联时为 digest 精确引用，直接触发时为 :base tag。
+      # 供 trigger-dynamic 透传给动态层 slim 变体（仅 digest 形式才透传）。
+      base_image: ${{ steps.base_image.outputs.image }}
 
     steps:
       - name: Checkout repository
@@ -213,21 +216,30 @@ jobs:
             if (!desktopImage.includes('@sha256:')) {
               throw new Error(`Desktop image digest was not produced: ${desktopImage}`);
             }
+            const inputs = {
+              desktop_image: desktopImage,
+              opencode_version: '${{ steps.versions.outputs.opencode_version }}',
+              code_server_version: '${{ steps.versions.outputs.code_server_version }}',
+              codex_version: '${{ steps.versions.outputs.codex_version }}',
+              serena_version: '${{ steps.versions.outputs.serena_version }}',
+              claude_code_version: '${{ steps.versions.outputs.claude_code_version }}',
+              codex_security_version: '${{ steps.versions.outputs.codex_security_version }}',
+              openchamber_version: '${{ steps.versions.outputs.openchamber_version }}'
+            };
+            // 仅级联路径（本 job 从 Base digest 精确引用构建）才透传 base_image，
+            // 让动态层 slim 变体锚定同一 Base digest；Desktop 层单独变更时省略该入参，
+            // 动态层 slim 变体回退 :base tag 并全量命中缓存零成本通过。
+            const baseImage = process.env.BASE_IMAGE || '';
+            if (baseImage.includes('@sha256:')) {
+              inputs.base_image = baseImage;
+            }
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'docker-build.yml',
               ref: 'main',
-              inputs: {
-                desktop_image: desktopImage,
-                opencode_version: '${{ steps.versions.outputs.opencode_version }}',
-                code_server_version: '${{ steps.versions.outputs.code_server_version }}',
-                codex_version: '${{ steps.versions.outputs.codex_version }}',
-                serena_version: '${{ steps.versions.outputs.serena_version }}',
-                claude_code_version: '${{ steps.versions.outputs.claude_code_version }}',
-                codex_security_version: '${{ steps.versions.outputs.codex_security_version }}',
-                openchamber_version: '${{ steps.versions.outputs.openchamber_version }}'
-              }
+              inputs
             });
         env:
           DESKTOP_IMAGE: ${{ needs.build-desktop.outputs.image }}@${{ needs.build-desktop.outputs.digest }}
+          BASE_IMAGE: ${{ needs.build-desktop.outputs.base_image }}

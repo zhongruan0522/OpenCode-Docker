@@ -185,11 +185,14 @@ EOF
         chown -R app:app /home/app/.ssh
 
         # desktop 用户（多用户引入后必须显式分发，否则该账号无法 SSH 登录）
-        mkdir -p /home/desktop/.ssh
-        cp /home/app/.ssh/authorized_keys /home/desktop/.ssh/authorized_keys
-        chmod 700 /home/desktop/.ssh
-        chmod 600 /home/desktop/.ssh/authorized_keys
-        chown -R desktop:desktop /home/desktop/.ssh
+        # slim 变体（无桌面层）未创建 desktop 用户，跳过分发避免启动报错
+        if id desktop >/dev/null 2>&1; then
+            mkdir -p /home/desktop/.ssh
+            cp /home/app/.ssh/authorized_keys /home/desktop/.ssh/authorized_keys
+            chmod 700 /home/desktop/.ssh
+            chmod 600 /home/desktop/.ssh/authorized_keys
+            chown -R desktop:desktop /home/desktop/.ssh
+        fi
 
         /usr/sbin/sshd
         echo "==> [SSH] SSH Server 已启动，端口 2223，用户 root/app/desktop，公钥认证"
@@ -211,7 +214,11 @@ EOF
     #     密码通过 DESKTOP_PASSWORD 设置（默认 "app"）
     # ==========================================
     if [ "${ENABLE_DESKTOP:-1}" = "1" ]; then
-        /usr/local/bin/init-desktop.sh
+        if [ -x /usr/local/bin/init-desktop.sh ]; then
+            /usr/local/bin/init-desktop.sh
+        else
+            echo "==> [Desktop] 当前为 slim 镜像（NoDesktop-Base，不含远程桌面），已跳过桌面初始化；如需 RDP 请使用 -desktop 后缀镜像"
+        fi
     else
         echo "==> [Desktop] 远程桌面已禁用 (ENABLE_DESKTOP=${ENABLE_DESKTOP})"
     fi

@@ -2,8 +2,13 @@
 
 # ==========================================
 # 动态层：仅包含自动检测更新的组件
-# FROM 桌面层镜像（ghcr.io/zhongruan0522/opencode-docker:desktop）
-# 每次自动更新触发时只重建此文件，Base/桌面层完全复用缓存
+#
+# CI（docker-build.yml）用同一份 Dockerfile 在同一工作流内并行构建两个变体，
+# 各自显式传入 BASE_IMAGE：
+#   - slim（默认）：FROM Base 镜像（:base），产出无后缀 tag vX.Y.Z（NoDesktop-Base）
+#   - desktop   ：FROM 桌面镜像（:desktop），产出 vX.Y.Z-desktop（Desktop-Base）
+# 下方 ARG 默认值仅作本地构建兜底（默认 slim）；每次自动更新触发时只重建本文件，
+# Base/桌面层完全复用缓存。
 # ==========================================
 
 # ---
@@ -29,7 +34,7 @@
 #
 # 拆分 npm 层后，单个 npm 包升级只重建自己一层，不影响其他 npm 包缓存。
 
-ARG BASE_IMAGE=ghcr.io/zhongruan0522/opencode-docker:desktop
+ARG BASE_IMAGE=ghcr.io/zhongruan0522/opencode-docker:base
 FROM ${BASE_IMAGE}
 
 ARG OPENCODE_VERSION=latest
