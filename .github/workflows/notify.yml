@@ -36,17 +36,18 @@ jobs:
             echo "template_id=AAqv27Co32Y8H" >> $GITHUB_OUTPUT
           fi
 
-          # 2. 根据工作流名称映射镜像层（Branch 变量语义为「变体-父层」继承链，非 git 分支）
-          #    Desktop-Base = 基于 Base 的带桌面镜像；NoDesktop-Base = 基于 Base 的无桌面 slim 镜像
+          # 2. 根据工作流名称映射镜像层（Branch 变量语义为「镜像层级」，非 git 分支）
+          #    一条通知只声明本层打包完成：Base 层 / 桌面层 / 动态层。
+          #    动态层的 slim 与 desktop 双变体在同一次 run 内并行完成，不再区分变体粒度。
           case "$WF_NAME" in
             "Build Base Image")
-              echo "layer=Base" >> $GITHUB_OUTPUT
+              echo "layer=Base 层" >> $GITHUB_OUTPUT
               ;;
             "Build Desktop Image")
-              echo "layer=Desktop-Base" >> $GITHUB_OUTPUT
+              echo "layer=桌面层" >> $GITHUB_OUTPUT
               ;;
             "Build and Push Docker Image")
-              echo "layer=Desktop-Base / NoDesktop-Base" >> $GITHUB_OUTPUT
+              echo "layer=动态层" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "Unmapped workflow name for layer: $WF_NAME" >&2
