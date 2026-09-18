@@ -72,14 +72,14 @@ fi
 # ==========================================
 cat > /etc/profile.d/opencode-env.sh <<'ENV_EOF'
 export PNPM_HOME=/home/app/.local/share/pnpm
-export PATH=/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/flutter/bin:/opt/gradle-9.0.0/bin:/opt/gradle-7.5/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.1:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-17-openjdk-current/bin:/home/app/.local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH=/usr/local/go/bin:/home/app/go/bin:/opt/bun/bin:/opt/cargo/bin:/opt/flutter/bin:/opt/gradle-9.0.0/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.1:/opt/apk-tools/bin:/opt/apk-tools/jadx/bin:/opt/apk-tools/dex2jar:/usr/lib/jvm/java-21-openjdk-current/bin:/home/app/.local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export GOPATH=/home/app/go
 export BUN_INSTALL=/opt/bun
 export RUSTUP_HOME=/opt/rustup
 export CARGO_HOME=/opt/cargo
 export ANDROID_SDK_ROOT=/opt/android-sdk
 export ANDROID_HOME=/opt/android-sdk
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-current
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-current
 export GRADLE_HOME=/opt/gradle-9.0.0
 export PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
 export PLAYWRIGHT_MCP_HEADLESS=1
