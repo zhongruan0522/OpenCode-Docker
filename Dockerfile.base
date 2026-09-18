@@ -401,7 +401,7 @@ RUN sed -i '/^path-exclude \/usr\/share\/locale\/\*$/d' /etc/dpkg/dpkg.cfg.d/doc
          echo "OK: /usr/share/locale path-exclude removed, translations will be installed"; \
        fi
 
-# 运行时依赖 + Playwright Chromium 系统库 + Wine（Windows 交叉编译）
+# 运行时依赖 + Playwright Chromium 系统库 + Wine
 # 启用 non-free 组件，因为 unrar 仅在 non-free 仓库中提供
 # Adoptium (Eclipse Temurin) 仓库 — Debian bookworm 默认仓库不提供 JDK 21
 RUN dpkg --add-architecture i386 \
