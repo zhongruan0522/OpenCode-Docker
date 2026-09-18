@@ -84,7 +84,7 @@ RUN sed -i \
     && echo "==> xrdp 登录界面配色已对齐 macOS"
 
 # ---
-# 3. Sarasa UI/Mono 更纱字体（低频，桌面默认配置实际使用的两个家族）
+# 3. Sarasa UI/Mono 更纱字体（低频）
 # ---
 # 中英文等宽对齐的现代中文字体，终端/编辑器友好。
 # Debian bookworm 仓库版本较旧且只有部分子集，直接从 GitHub releases 取固定版本。
@@ -227,7 +227,7 @@ COPY desktop/xfce-xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsetti
 COPY desktop/xfce-xfwm4.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 COPY desktop/xfce-desktop.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
 COPY desktop/xfce4-panel.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
-# apple logo（WhiteSur 上游素材），供面板 Whisker 菜单按钮使用
+# apple logo（WhiteSur 上游素材）
 COPY desktop/apple-logo.svg /usr/share/icons/WhiteSur/panel-apple.svg
 # plank dock 主题：plank 查找 /usr/share/plank/themes/<ThemeName>/dock.theme，
 # WhiteSur 主题装在 /usr/share/themes/WhiteSur-Dark/plank/dock.theme，做目录软链对接
