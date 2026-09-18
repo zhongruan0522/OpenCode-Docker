@@ -219,54 +219,16 @@ RUN set -eux; \
 RUN curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTALL_DIR=/usr/local/bin sh \
     && rm -rf /opt/uv
 
-# Python 包（统一安装）
-RUN python3 -m pip install --no-cache-dir --break-system-packages \
-        Pillow \
-        "scrapling[all]>=0.4.2" \
-        openpyxl \
-        pdf2image \
-        pypdf \
-        PyMuPDF \
-        pdfplumber \
-        reportlab \
-        python-docx \
-        python-pptx \
-        defusedxml \
-        numpy \
-        PyYAML \
-        httpx \
-        requests \
-        charset-normalizer \
-        "chardet>=5.2.0,<6" \
-        arjun \
-        uro \
-        bloodhound \
-        impacket \
-        mcp \
-        frida-tools \
-        fastapi \
-        "uvicorn[standard]" \
-        python-multipart \
-        sse-starlette \
-        websockets \
-        SQLAlchemy \
-        sqlmodel \
-        asyncpg \
-        pydantic \
-        pydantic-settings \
-        openai \
-        openai-agents \
-        tiktoken \
-        asyncssh \
-        docker \
-        PyJWT \
-        python-dotenv \
-        jsonschema \
-        httpx-sse \
-        click \
-        tqdm
+# 构建期一次性 venv：仅供下方 Playwright 浏览器层运行 scrapling 安装器（下载 camoufox 等）。
+# 运行期 Python 包不在 builder 安装——避免经 /usr/local COPY 带入、破坏 final stage
+# 的单次统一解析；统一清单见 base/python/preload-python-packages.sh（final stage 执行）。
+RUN python3 -m venv /tmp/pw-build-venv \
+    && /tmp/pw-build-venv/bin/pip install --no-cache-dir "scrapling[all]>=0.4.2"
 
 # Playwright Chromium 浏览器（体积大头，单独一层）
+# Python playwright 的 chromium 修订版对齐已随 Python 包迁至
+# base/python/preload-python-packages.sh（final stage 执行），此处只负责
+# Node 侧浏览器下载与 scrapling（构建期 venv）的浏览器安装。
 RUN mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
     && PLAYWRIGHT_ROOT="$(npm root -g)" \
     && if [ -f "${PLAYWRIGHT_ROOT}/@playwright/mcp/node_modules/playwright/cli.js" ]; then \
@@ -310,18 +272,9 @@ RUN mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
     && install_archive chromium "$(extract_plan_field 'Chrome for Testing' 'Install location')" "$(extract_plan_field 'Chrome for Testing' 'Download url')" \
     && install_archive ffmpeg "$(extract_plan_field 'FFmpeg' 'Install location')" "$(extract_plan_field 'FFmpeg' 'Download url')" \
     && install_archive chromium-headless-shell "$(extract_plan_field 'Chrome Headless Shell' 'Install location')" "$(extract_plan_field 'Chrome Headless Shell' 'Download url')" \
-    && PYTHON_PW_REVISION=$(python3 -m playwright install --dry-run chromium 2>&1 | grep -oP 'chromium v\K[0-9]+') \
-    && NODE_REVISION=$(ls -d "${PLAYWRIGHT_BROWSERS_PATH}/chromium-"* | grep -oP 'chromium-\K[0-9]+' | sort -rn | head -1) \
-    && if [ "${PYTHON_PW_REVISION}" != "${NODE_REVISION}" ]; then \
-         echo "Symlinking chromium-${PYTHON_PW_REVISION} -> chromium-${NODE_REVISION} for Python playwright"; \
-         ln -sf "${PLAYWRIGHT_BROWSERS_PATH}/chromium-${NODE_REVISION}" "${PLAYWRIGHT_BROWSERS_PATH}/chromium-${PYTHON_PW_REVISION}"; \
-         if [ -d "${PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-${NODE_REVISION}" ]; then \
-           ln -sf "${PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-${NODE_REVISION}" "${PLAYWRIGHT_BROWSERS_PATH}/chromium_headless_shell-${PYTHON_PW_REVISION}"; \
-         fi; \
-       else \
-         echo "Revisions match (${NODE_REVISION}), no symlink needed"; \
-       fi \
-    && PLAYWRIGHT_SKIP_BROWSER_GC=1 scrapling install --force
+    && PLAYWRIGHT_SKIP_BROWSER_GC=1 PATH="/tmp/pw-build-venv/bin:${PATH}" \
+       /tmp/pw-build-venv/bin/scrapling install --force \
+    && rm -rf /tmp/pw-build-venv
 
 # CodeGraph（代码知识图谱 CLI + MCP 服务器，源码见 参考项目/codegraph）
 # 自包含 bundle：内置官方 Node 24 运行时（node:sqlite + tree-sitter wasm），零原生依赖、
@@ -605,8 +558,15 @@ RUN bash /tmp/preload-go-modules.sh \
     && chown -R app:app /home/app/go \
     && rm -f /tmp/preload-go-modules.sh
 
+# 预装运行期 Python 包（原 builder 内联安装迁入，清单见 base/python/preload-python-packages.sh，
+# 含 Python playwright chromium 修订版对齐）。与 Go 模块预热同理收敛为独立层：
+# 仅改清单只失效本层，不拖累 builder 的 Playwright Chromium 下载等重层。
+COPY base/python/preload-python-packages.sh /tmp/preload-python-packages.sh
+RUN bash /tmp/preload-python-packages.sh \
+    && rm -f /tmp/preload-python-packages.sh
+
 # mihomo（Clash 内核）
-# 放在 Go 模块预热之后：mihomo-only 升级不会让耗时较长的 Go 预热层失效。
+# 放在 Go 模块 / Python 包预热之后：mihomo-only 升级不会让耗时较长的预热层失效。
 COPY --from=mihomo-downloader /usr/local/bin/mihomo /usr/local/bin/mihomo
 
 # === 容器启动 / 进程管理脚本（base/，仅 Base 归属部分） ===
