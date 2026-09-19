@@ -221,13 +221,13 @@ RUN curl -fsSL https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTA
 
 # 构建期一次性 venv：仅供下方 Playwright 浏览器层运行 scrapling 安装器（下载 camoufox 等）。
 # 运行期 Python 包不在 builder 安装——避免经 /usr/local COPY 带入、破坏 final stage
-# 的单次统一解析；统一清单见 base/python/preload-python-packages.sh（final stage 执行）。
+# 的单次统一解析；统一清单见 base/install-python.sh（final stage 执行）。
 RUN python3 -m venv /tmp/pw-build-venv \
     && /tmp/pw-build-venv/bin/pip install --no-cache-dir "scrapling[all]>=0.4.2"
 
 # Playwright Chromium 浏览器（体积大头，单独一层）
 # Python playwright 的 chromium 修订版对齐已随 Python 包迁至
-# base/python/preload-python-packages.sh（final stage 执行），此处只负责
+# base/install-python.sh（final stage 执行），此处只负责
 # Node 侧浏览器下载与 scrapling（构建期 venv）的浏览器安装。
 RUN mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
     && PLAYWRIGHT_ROOT="$(npm root -g)" \
@@ -553,17 +553,19 @@ COPY --from=builder --chown=app:app /home/app/.cache/ms-playwright /home/app/.ca
 COPY --from=builder --chown=app:app /home/app/go/pkg/mod /home/app/go/pkg/mod
 
 # 预热 Go 模块缓存，避免容器启动后反复下载大体量依赖。
-COPY base/go/preload-go-modules.sh /tmp/preload-go-modules.sh
-RUN bash /tmp/preload-go-modules.sh \
-    && chown -R app:app /home/app/go \
-    && rm -f /tmp/preload-go-modules.sh
+# 命令化布局同 init-clash.sh：脚本常驻 /usr/local/bin/install-go.sh，
+# 运行期可手动重跑预热；仍为独立镜像层，仅改清单只失效本层。
+COPY base/install-go.sh /usr/local/bin/install-go.sh
+RUN chmod +x /usr/local/bin/install-go.sh \
+    && /usr/local/bin/install-go.sh \
+    && chown -R app:app /home/app/go
 
-# 预装运行期 Python 包（原 builder 内联安装迁入，清单见 base/python/preload-python-packages.sh，
+# 预装运行期 Python 包（原 builder 内联安装迁入，清单见 base/install-python.sh，
 # 含 Python playwright chromium 修订版对齐）。与 Go 模块预热同理收敛为独立层：
 # 仅改清单只失效本层，不拖累 builder 的 Playwright Chromium 下载等重层。
-COPY base/python/preload-python-packages.sh /tmp/preload-python-packages.sh
-RUN bash /tmp/preload-python-packages.sh \
-    && rm -f /tmp/preload-python-packages.sh
+COPY base/install-python.sh /usr/local/bin/install-python.sh
+RUN chmod +x /usr/local/bin/install-python.sh \
+    && /usr/local/bin/install-python.sh
 
 # mihomo（Clash 内核）
 # 放在 Go 模块 / Python 包预热之后：mihomo-only 升级不会让耗时较长的预热层失效。
@@ -574,6 +576,7 @@ COPY base/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY base/healthcheck.sh /usr/local/bin/healthcheck.sh
 COPY base/init-clash.sh /usr/local/bin/init-clash.sh
 COPY base/supervisord.conf /etc/supervisor/supervisord.conf
+# install-go.sh / install-python.sh 已随各自预热层 COPY 到 /usr/local/bin，不在此重复。
 # init-desktop.sh / xrdp-startwm.sh 归桌面层（Dockerfile.desktop），此处不再 COPY。
 # 桌面环境配置/资源（desktop/**）同样归桌面层。
 

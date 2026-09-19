@@ -5,7 +5,7 @@ set -euo pipefail
 
 # 运行期 Python 包统一安装清单（Base 构建期在 final stage 执行，随镜像分发）。
 #
-# 与 base/go/preload-go-modules.sh 同理：清单收敛为独立文件 + 独立镜像层，
+# 与 base/install-go.sh 同理：清单收敛为独立文件 + 独立镜像层，
 # 仅改清单只失效本层，不会拖累 builder 的 Playwright Chromium 下载、scrapling
 # 浏览器安装、CodeGraph 等重层。运行期结果与原先 builder 内联安装一致：
 # 单次 pip 解析，装入系统 site-packages（/usr/local/lib/python3*/dist-packages）。
@@ -16,6 +16,8 @@ set -euo pipefail
 # - 保持排序（sort -f 顺序），便于 diff 和复用 Docker 缓存；
 # - 不要手工添加"以后可能用到"的包——每个条目都应有真实出处，否则只会白白增大镜像；
 # - 改动推送后由 build-base.yml 重建 Base 层，并级联重建桌面层与动态层。
+# - 本文件随镜像安装为容器命令 /usr/local/bin/install-python.sh（同 init-clash.sh
+#   的命令化布局），容器内可手动重跑补装/更新包；写入系统 site-packages 需 root。
 xargs -r python3 -m pip install --no-cache-dir --break-system-packages <<'PACKAGES'
 arjun
 asyncpg
