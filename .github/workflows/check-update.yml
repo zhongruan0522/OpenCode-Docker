@@ -225,11 +225,11 @@ jobs:
             "${{ steps.serena.outputs.version }}" \
             "https://pypi.org/project/serena-agent/${{ steps.serena.outputs.version }}/"
 
-          # Claude Code: 官方 npm 包，Changelog 指向 npm 对应版本页
+          # Claude Code: 官方 npm 包，Changelog 指向 GitHub 上的 CHANGELOG.md
           check_update "Claude Code" \
             "${{ steps.local.outputs.claudecode }}" \
             "${{ steps.claudecode.outputs.version }}" \
-            "https://www.npmjs.com/package/@anthropic-ai/claude-code/v/${{ steps.claudecode.outputs.version }}"
+            "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md"
 
           # codex-security: 仅 npm 分发，GitHub tag 格式为 npm-v{version}
           check_update "codex-security" \
