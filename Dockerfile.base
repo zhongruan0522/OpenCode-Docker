@@ -631,6 +631,13 @@ RUN hyperframes doctor --json > /tmp/hyperframes-doctor.json \
     && [ "${failed}" -eq 0 ] \
     && rm -f /tmp/hyperframes-doctor.json
 
+# app 用户加入 docker 组（组由 docker-ce 包安装时创建）：DinD dockerd 拉起后
+# /var/run/docker.sock 属 root:docker 且 0660，app 用户（容器内主 agent 用户）需
+# 组成员身份才能使用 docker CLI（Hyperframes doctor "Docker running" 检查同此依赖）。
+# 运行期 LOCAL_UID 调整只改 uid/gid，不触碰 /etc/group 成员列表，组成员身份得以保留。
+# 独立层置于层序尾部：不失效其上任何既有层。
+RUN usermod -aG docker app && id app
+
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

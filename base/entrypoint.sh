@@ -91,6 +91,10 @@ export LANGUAGE=zh_CN:zh
 export LC_ALL=zh_CN.UTF-8
 export EDITOR=vim
 export PIP_BREAK_SYSTEM_PACKAGES=1
+# 工具自更新关闭开关与镜像 ENV 保持一致：镜像级 ENV（Dockerfile）只注入 docker
+# exec/主进程链，SSH/桌面等登录 shell 经由本文件继承，二者需同步维护。
+export CODEGRAPH_NO_UPDATE_CHECK=1
+export HYPERFRAMES_NO_UPDATE_CHECK=1
 ENV_EOF
 chmod +x /etc/profile.d/opencode-env.sh
 
