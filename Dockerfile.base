@@ -452,7 +452,11 @@ RUN dpkg --add-architecture i386 \
         libcairo2 \
         libdbus-1-3 \
         # Electron/AppImage GUI 运行时依赖
+        # fuse3 提供 setuid 的 fusermount3（deb 内自带 fusermount 兼容符号链接）：
+        # AppImage runtime 挂载 squashfs 自身必需，只有 libfuse2 库时
+        # anything-analyzer 等 AppImage 会报 "fuse: failed to exec fusermount"。
         libfuse2 \
+        fuse3 \
         libgtk-3-0 \
         libsecret-1-0 \
         libxss1 \
@@ -479,7 +483,9 @@ RUN dpkg --add-architecture i386 \
         nsis \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && command -v fusermount fusermount3 \
+    && [ -u /bin/fusermount3 ] && [ -e /bin/fusermount ]
 # 说明：xrdp/XFCE4/fcitx5 等远程桌面组件已拆分至 Dockerfile.desktop（桌面层），
 # 此处仅保留 headless 场景的 GUI 运行库。
 
