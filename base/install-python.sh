@@ -23,8 +23,13 @@ set -euo pipefail
 # （nvidia-* 依赖额外 3GB+），本镜像只需 CPU 推理。出处：Hyperframes doctor
 # "BGM (MusicGen)" 检查项要求 import transformers/torch/soundfile/numpy（本地音乐回退）。
 # 先行安装后，下方统一清单解析时 torch 已满足，不会切换回 CUDA 轮子。
+# 注意：CPU 索引必须搭配 PyPI 作 extra-index——该索引镜像的 typing_extensions 轮子
+# 元数据 Name 不一致会被 pip 丢弃，随后其源码包的构建依赖（flit_core）在 CPU 索引
+# 中不存在，导致解析失败（2026-09-26 构建实测）。torch 的 +cpu 本地版本号高于
+# PyPI 同版本，extra-index 不会误选 CUDA 轮子。
 xargs -r python3 -m pip install --no-cache-dir --break-system-packages \
-    --index-url https://download.pytorch.org/whl/cpu <<'PACKAGES'
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple <<'PACKAGES'
 torch
 PACKAGES
 
