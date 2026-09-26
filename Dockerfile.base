@@ -315,6 +315,14 @@ RUN set -eux; \
     ln -sfn /opt/codegraph/current/bin/codegraph /usr/local/bin/codegraph; \
     /usr/local/bin/codegraph --version
 
+# Hyperframes CLI（AI 视频生成 CLI，npm 分发，latest 标记安装，升级走 Base 层重建）。
+# 置于 builder 层序末尾：新增/升级本工具不会失效其上的 Playwright 浏览器、
+# Electron 缓存等重层缓存。运行期自更新由 final stage 的
+# HYPERFRAMES_NO_UPDATE_CHECK=1 关闭（见下）。
+ARG HYPERFRAMES_VERSION=latest
+RUN npm install -g hyperframes@${HYPERFRAMES_VERSION} \
+    && hyperframes --version
+
 # ---
 # 阶段 2.5：下载 mihomo（Clash 内核）
 # ---
@@ -537,6 +545,10 @@ ENV PNPM_HOME="/home/app/.local/share/pnpm" \
 # Base 层重建。需要时用户可临时 export CODEGRAPH_NO_UPDATE_CHECK= 覆盖。
 ENV CODEGRAPH_NO_UPDATE_CHECK=1
 
+# Hyperframes：关闭运行期更新检测与后台自更新。npm 全局目录归属 root，app 用户
+# 自更新必然失败且徒增噪音；版本升级统一走 Base 层重建（同 CodeGraph 先例）。
+ENV HYPERFRAMES_NO_UPDATE_CHECK=1
+
 # 用户和目录
 # /workspace 同时让 app 组可读写执行（desktop 已加入 app 组），保证两个用户都能访问代码工作区。
 # 组写权限通过 chmod g+rwx + setgid 实现：setgid 让 /workspace 下新建子目录继承组而非创建者主组。
@@ -584,6 +596,40 @@ COPY base/supervisord.conf /etc/supervisor/supervisord.conf
 # 桌面环境配置/资源（desktop/**）同样归桌面层。
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh /usr/local/bin/init-clash.sh
+
+# === FFmpeg（Hyperframes CLI doctor 必需项，通用音视频转码工具，含 ffprobe）===
+# 独立层置于层序尾部：本层新增/升级不失效其上 Chrome、Docker CE、Go/Python 预热等
+# 既有层。libgomp1 为 whisper-cli（下一层）与 torch 的运行时依赖。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ffmpeg -version | head -n1
+
+# === whisper.cpp（whisper-cli，Hyperframes CLI doctor 检查项）===
+# 转录模型不预置（首次使用按需下载，doctor 只检查二进制存在性）。
+# GGML_NATIVE=OFF 使二进制不绑定构建机 CPU 指令集；BUILD_SHARED_LIBS=OFF 产出
+# 自包含静态二进制，免搬运 libggml 动态库。版本经 ARG 锁定，升级走 Base 层重建。
+ARG WHISPER_CPP_VERSION=v1.9.4
+RUN git clone --depth 1 --branch "${WHISPER_CPP_VERSION}" https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \
+    && cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
+    && cmake --build /tmp/whisper.cpp/build --config Release -j"$(nproc)" --target whisper-cli \
+    && cp /tmp/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli \
+    && rm -rf /tmp/whisper.cpp \
+    && whisper-cli --help > /dev/null
+
+# === Hyperframes CLI 环境自检（构建期门禁，检查失败即构建失败）===
+# `doctor --json` 恒以 0 退出，必须按 checks 内容断言。整体 ok 还含两类运行时状态，
+# 构建期无从满足、不在断言范围：
+#   - "Docker running"：构建期无 dockerd，容器运行期经 ENABLE_DOCKERD=1 或
+#     supervisorctl start dockerd 拉起；
+#   - "/dev/shm"：docker run 默认 64MB，需运行时 shm-size ≥ 256MB
+#     （docker-compose.yml 已设 2gb）。
+RUN hyperframes doctor --json > /tmp/hyperframes-doctor.json \
+    && jq -r '.checks[] | "\(.ok)  \(.name): \(.detail)"' /tmp/hyperframes-doctor.json \
+    && failed="$(jq '[.checks[] | select(.name | IN("Version","Node.js","CPU","Memory","Disk","Frames cache","Archive extractor","Environment","whisper-cpp","TTS (Kokoro)","BGM (MusicGen)","FFmpeg","FFprobe","Chrome","Docker")) | select(.ok | not)] | length' /tmp/hyperframes-doctor.json)" \
+    && echo "hyperframes doctor failed checks: ${failed}" \
+    && [ "${failed}" -eq 0 ] \
+    && rm -f /tmp/hyperframes-doctor.json
 
 WORKDIR /workspace
 

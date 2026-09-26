@@ -18,6 +18,19 @@ set -euo pipefail
 # - 改动推送后由 build-base.yml 重建 Base 层，并级联重建桌面层与动态层。
 # - 本文件随镜像安装为容器命令 /usr/local/bin/install-python.sh（同 init-clash.sh
 #   的命令化布局），容器内可手动重跑补装/更新包；写入系统 site-packages 需 root。
+
+# torch 先行单独安装，走 PyTorch CPU 专用索引：PyPI 的 linux 默认轮子捆绑 CUDA
+# （nvidia-* 依赖额外 3GB+），本镜像只需 CPU 推理。出处：Hyperframes doctor
+# "BGM (MusicGen)" 检查项要求 import transformers/torch/soundfile/numpy（本地音乐回退）。
+# 先行安装后，下方统一清单解析时 torch 已满足，不会切换回 CUDA 轮子。
+xargs -r python3 -m pip install --no-cache-dir --break-system-packages \
+    --index-url https://download.pytorch.org/whl/cpu <<'PACKAGES'
+torch
+PACKAGES
+
+# 统一清单。其中 Hyperframes doctor 新增出处：
+# - "TTS (Kokoro)" 检查项：kokoro-onnx + soundfile（本地语音回退）；
+# - "BGM (MusicGen)" 检查项：transformers（torch 见上，numpy/soundfile 下方已含）。
 xargs -r python3 -m pip install --no-cache-dir --break-system-packages <<'PACKAGES'
 arjun
 asyncpg
@@ -34,6 +47,7 @@ httpx
 httpx-sse
 impacket
 jsonschema
+kokoro-onnx
 mcp
 numpy
 openai
@@ -55,11 +69,13 @@ PyYAML
 reportlab
 requests
 "scrapling[all]>=0.4.2"
+soundfile
 SQLAlchemy
 sqlmodel
 sse-starlette
 tiktoken
 tqdm
+transformers
 uro
 "uvicorn[standard]"
 websockets
