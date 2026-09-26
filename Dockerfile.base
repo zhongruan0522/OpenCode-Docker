@@ -21,7 +21,6 @@ ARG ELECTRON_VERSION=41.7.1
 ARG BUN_VERSION=1.3.14
 ARG PNPM_VERSION=latest
 ARG ANYTHING_ANALYZER_VERSION=3.6.50
-ARG RADARE2_VERSION=6.1.6
 ARG FLUTTER_VERSION=3.44.4
 ARG CODEGRAPH_VERSION=v1.6.0
 
@@ -201,15 +200,11 @@ RUN mkdir -p /opt/apk-tools/bin \
     && chmod +x /opt/apk-tools/jadx/bin/jadx /opt/apk-tools/jadx/bin/jadx-gui \
     && chmod +x /opt/apk-tools/dex2jar/d2j-*.sh
 
-# 逆向 GUI / CLI 工具链（radare2 / Anything Analyzer）
-# radare2 用官方 deb 包（命名规律 radare2_<ver>_<arch>.deb，arch 与 dpkg 一致），apt 自动解决依赖
-# Anything Analyzer 是单一 AppImage（文件名不带架构标识）
+# 逆向 GUI 工具（Anything Analyzer，单一 AppImage，文件名不带架构标识）
+# 注意：radare2 不在本阶段安装——其 deb 包按 Debian 布局落在 /usr，不在
+# builder→final 的任何 COPY 源路径里，装在这里不会进入最终镜像；现迁至
+# final 阶段层序尾部独立安装（见下方 final 的 radare2 层）。
 RUN set -eux; \
-    r2_arch="$(dpkg --print-architecture)"; \
-    case "${r2_arch}" in amd64|arm64) ;; *) echo "Unsupported radare2 architecture: ${r2_arch}" >&2; exit 1 ;; esac; \
-    curl -fsSL "https://github.com/radareorg/radare2/releases/download/${RADARE2_VERSION}/radare2_${RADARE2_VERSION}_${r2_arch}.deb" -o /tmp/radare2.deb; \
-    apt-get update && apt-get install -y --no-install-recommends /tmp/radare2.deb && rm -rf /var/lib/apt/lists/*; \
-    rm -f /tmp/radare2.deb; \
     mkdir -p /opt/anything-analyzer; \
     curl -fL --retry 5 --retry-all-errors --connect-timeout 30 --max-time 900 \
       "https://github.com/Mouseww/anything-analyzer/releases/download/v${ANYTHING_ANALYZER_VERSION#v}/Anything-Analyzer-${ANYTHING_ANALYZER_VERSION}.AppImage" \
@@ -630,6 +625,21 @@ RUN hyperframes doctor --json > /tmp/hyperframes-doctor.json \
     && echo "hyperframes doctor failed checks: ${failed}" \
     && [ "${failed}" -eq 0 ] \
     && rm -f /tmp/hyperframes-doctor.json
+
+# === radare2（逆向 CLI 工具链：r2 / rabin2 等）===
+# 必须装在最终镜像阶段：radare2 是完整 apt 包（/usr/bin/r2、/usr/lib/radare2/* 等，
+# 按 Debian 布局落在 /usr），不在 builder→final 的任何 COPY 源路径里，也无法像 gh CLI
+# 那样单二进制搬运（r2 依赖 libr_* 动态库）——论证同上方 Chrome。
+# 历史 bug：曾装在 builder 阶段，产物从未进入最终镜像（2026-09-26 环境审计发现修复）。
+# 独立层置于层序尾部：新增/升级本工具不失效其上任何既有层。
+ARG RADARE2_VERSION=6.1.6
+RUN set -eux; \
+    r2_arch="$(dpkg --print-architecture)"; \
+    case "${r2_arch}" in amd64|arm64) ;; *) echo "Unsupported radare2 architecture: ${r2_arch}" >&2; exit 1 ;; esac; \
+    curl -fsSL --retry 3 "https://github.com/radareorg/radare2/releases/download/${RADARE2_VERSION}/radare2_${RADARE2_VERSION}_${r2_arch}.deb" -o /tmp/radare2.deb; \
+    apt-get update && apt-get install -y --no-install-recommends /tmp/radare2.deb && rm -rf /var/lib/apt/lists/*; \
+    rm -f /tmp/radare2.deb; \
+    r2 -v && rabin2 -v
 
 # app 用户加入 docker 组（组由 docker-ce 包安装时创建）：DinD dockerd 拉起后
 # /var/run/docker.sock 属 root:docker 且 0660，app 用户（容器内主 agent 用户）需
